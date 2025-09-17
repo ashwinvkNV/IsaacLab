@@ -42,7 +42,7 @@ def randomize_gear_type(
     gear_types: List[str] = ["gear_small", "gear_medium", "gear_large"]
 ):
     """Randomize the gear type being used for the specified environments.
-    
+
     Args:
         env: The environment containing the assets
         env_ids: Environment IDs to randomize
@@ -50,12 +50,12 @@ def randomize_gear_type(
     """
     # Randomly select gear type for each environment
     selected_gears = [random.choice(gear_types) for _ in range(len(env_ids))]
-    
+
     # Store the selected gear type in the environment instance
     # This will be used by the observation functions
     if not hasattr(env, '_current_gear_type'):
         env._current_gear_type = ["gear_medium"] * env.num_envs
-    
+
     for i, env_id in enumerate(env_ids):
         env._current_gear_type[env_id] = selected_gears[i]
     # print(f"env._current_gear_type: {env._current_gear_type}")
@@ -76,7 +76,7 @@ def set_robot_to_grasp_pose(
         rot_offset_tensor = torch.tensor(rot_offset, device=env.device).unsqueeze(0).expand(len(env_ids), -1)
     else:
         rot_offset_tensor = None
-    
+
     # Check if environment has gear type selection
     if not hasattr(env, '_current_gear_type'):
         raise ValueError("Environment does not have '_current_gear_type' attribute. Ensure randomize_gear_type event is configured.")
@@ -96,18 +96,18 @@ def set_robot_to_grasp_pose(
         env_ids_list = env_ids.tolist() if isinstance(env_ids, torch.Tensor) else list(env_ids)
         grasp_object_pos_world = torch.zeros(len(env_ids), 3, device=env.device)
         grasp_object_quat = torch.zeros(len(env_ids), 4, device=env.device)
-        
+
         for row_idx, env_id in enumerate(env_ids_list):
             # Get the gear type for this environment
             gear_key = env._current_gear_type[env_id]
             selected_asset_name = f"factory_{gear_key}"
-            
+
             # Get the gear asset for this environment
             gear_asset: RigidObject = env.scene[selected_asset_name]
             grasp_object_pos_world[row_idx] = gear_asset.data.root_link_pos_w[env_id].clone()
             grasp_object_quat[row_idx] = gear_asset.data.root_link_quat_w[env_id].clone()
 
-        
+
         # First apply rotation offset to get the object's orientation
         if rot_offset_tensor is not None:
             # Apply rotation offset by quaternion multiplication
@@ -115,7 +115,7 @@ def set_robot_to_grasp_pose(
             grasp_object_quat = math_utils.quat_mul(grasp_object_quat, rot_offset_tensor)
             # print(f"Applied rot_offset: {rot_offset}")
             # print(f"grasp_object_quat after offset: {grasp_object_quat}")
-        
+
         if pos_randomization_range is not None:
             pos_keys = ["x", "y", "z"]
             range_list_pos = [pos_randomization_range.get(key, (0.0, 0.0)) for key in pos_keys]
@@ -129,29 +129,29 @@ def set_robot_to_grasp_pose(
 
             if pos_randomization_range is not None:
                 grasp_offset_tensor += rand_pos_offsets[row_idx]
-            
+
             # Transform position offset from rotated object frame to world frame
             grasp_object_pos_world[row_idx] = grasp_object_pos_world[row_idx] + math_utils.quat_apply(
                 grasp_object_quat[row_idx:row_idx+1], grasp_offset_tensor.unsqueeze(0)
             )[0]
-        
+
         # Convert to environment-relative coordinates by subtracting environment origins
         grasp_object_pos = grasp_object_pos_world
-        
+
         # Get end effector pose of the robot
         # Get the specific wrist_3_link pose
         try:
             # Find the index of the wrist_3_link body
             wrist_3_indices, wrist_3_names = robot_asset.find_bodies(["wrist_3_link"])
             wrist_3_idx = wrist_3_indices[0]
-            
+
             if len(wrist_3_indices) == 1:
                 wrist_3_idx = wrist_3_indices[0]  # Get the first (and should be only) index
-                
+
                 # Get the specific wrist_3_link pose
                 eef_pos_world = robot_asset.data.body_link_pos_w[env_ids, wrist_3_idx]  # Shape: (len(env_ids), 3)
                 eef_quat = robot_asset.data.body_link_quat_w[env_ids, wrist_3_idx]  # Shape: (len(env_ids), 4)
-                
+
                 # Convert to environment-relative coordinates
                 eef_pos = eef_pos_world
 
@@ -167,18 +167,18 @@ def set_robot_to_grasp_pose(
             else:
                 print("wrist_3_link not found in robot body names")
                 print(f"Available body names: {robot_asset.body_names}")
-                
+
         except Exception as e:
             print(f"Could not get end effector pose: {e}")
             print("You may need to adjust the body name or access method based on your robot configuration")
-        
+
 
         # Compute error to target using wrist_3_link as current and grasp_object as target
         if len(wrist_3_indices) > 0:
             # Get current end effector pose (wrist_3_link)
             current_eef_pos = eef_pos  # wrist_3_link position
             current_eef_quat = eef_quat  # wrist_3_link orientation
-            
+
             # Get target pose (grasp object)
             target_eef_pos = grasp_object_pos  # grasp object position
             target_eef_quat = grasp_object_quat  # grasp object orientation
@@ -200,12 +200,12 @@ def set_robot_to_grasp_pose(
             # Check if pose error is within threshold
             pos_error_norm = torch.norm(pos_error, dim=-1)
             rot_error_norm = torch.norm(axis_angle_error, dim=-1)
-            
+
             # print(f"Pose error - position: {pos_error[0]}")
             # print(f"Pose error - orientation: {axis_angle_error[0]}")
             # print(f"Position error norm: {pos_error_norm[0]}")
             # print(f"Rotation error norm: {rot_error_norm[0]}")
-            
+
             # Check if all environments have converged
             if torch.all(pos_error_norm < pos_threshold) and torch.all(rot_error_norm < rot_threshold):
                 # print(f"Converged after {i} iterations!")
@@ -220,29 +220,29 @@ def set_robot_to_grasp_pose(
             try:
                 # Get all jacobians from the robot
                 jacobians = robot_asset.root_physx_view.get_jacobians().clone()
-				
+
                 # Select the jacobian for the wrist_3_link body
                 # For fixed-base robots, Jacobian excludes the base body (index 0)
                 # So if wrist_3_idx is 6, the Jacobian index should be 5
                 jacobi_body_idx = wrist_3_idx - 1
-                
-                
+
+
                 jacobian = jacobians[env_ids, jacobi_body_idx, :, :]  # Only first 6 joints (arm, not gripper)
-                
+
                 delta_dof_pos = fc._get_delta_dof_pos(
                     delta_pose=delta_hand_pose,
                     ik_method="dls",
                     jacobian=jacobian,
                     device=env.device,
                 )
-                
+
                 # Update joint positions - only update arm joints (first 6)
                 joint_pos += delta_dof_pos
                 joint_vel = torch.zeros_like(joint_pos)
 
                 # Set into the physics simulation
 
-                
+
             except Exception as e:
                 print(f"Error in IK computation: {e}")
                 print("Note: You may need to implement proper jacobian computation for your robot")
@@ -259,7 +259,7 @@ def set_robot_to_grasp_pose(
         #     break
 
         # print(f"Step {i}")
-        
+
         i += 1
     # if i >= max_iterations:
     #     print(f"IK did not converge after {max_iterations} iterations")
@@ -273,41 +273,41 @@ def set_robot_to_grasp_pose(
     # for i in range(10):
     #     env.sim.render()
     #     input("Going to set object position...")
-    
+
     # TODO: Resttting the gear based on teh IK solution is not working as expected. The gear is not being placed in the correct position.
     # # Set the grasp object's pose to the current end-effector pose in world coordinates (with optional offsets)
     # # The offsets should be applied in reverse to get from wrist_3_link to gear pose
     # gear_pos_world = current_eef_pos
     # gear_quat_world = current_eef_quat
-    
+
     # # Apply position offset (subtract to get from wrist_3_link to gear position)
     # if pos_offset_tensor is not None:
     #     gear_pos_world = gear_pos_world - pos_offset_tensor
-    
+
     # # Apply rotation offset (inverse to get from wrist_3_link to gear orientation)
     # if rot_offset_tensor is not None:
     #     # Apply inverse rotation offset
     #     gear_quat_world = math_utils.quat_mul(current_eef_quat, math_utils.quat_conjugate(rot_offset_tensor))
-    
+
     # for i in range(10):
     #     env.sim.render()
     #     input("Press Enter to continue 1...")
-    
+
     # # Set the grasp object's pose for each environment based on selected gear type
     # for row_idx, env_id in enumerate(env_ids_list):
     #     gear_key = env._current_gear_type[env_id]
     #     selected_asset_name = f"factory_{gear_key}"
     #     gear_asset: RigidObject = env.scene[selected_asset_name]
     #     gear_asset.write_root_pose_to_sim(
-    #         torch.cat([gear_pos_world[row_idx:row_idx+1], gear_quat_world[row_idx:row_idx+1]], dim=-1), 
+    #         torch.cat([gear_pos_world[row_idx:row_idx+1], gear_quat_world[row_idx:row_idx+1]], dim=-1),
     #         env_ids=torch.tensor([env_id], device=env.device)
     #     )
 
     # Close the gripper by setting the finger_joint based on gear type
     all_joints, all_joints_names = robot_asset.find_joints([".*"])
-    
+
     joint_pos = robot_asset.data.joint_pos[env_ids].clone()
-    
+
     # @ireti: We need to change this so it workes with teh public 2f140 gripper that uses mimic joints
     finger_joints = all_joints[num_arm_joints:]
     finger_joint_names = all_joints_names[num_arm_joints:]
@@ -436,10 +436,10 @@ def set_finger_joint_pos_2f_140(
 ):
     # Get hand close positions for each environment based on gear type
     for row_idx, env_id in enumerate(env_ids_list):
-        
+
         joint_pos[row_idx, finger_joints[0]] = finger_joint_position
         joint_pos[row_idx, finger_joints[1]] = finger_joint_position
-        
+
         # outer finger joints
         joint_pos[row_idx, finger_joints[2]] = 0
         joint_pos[row_idx, finger_joints[3]] = 0
@@ -449,3 +449,19 @@ def set_finger_joint_pos_2f_140(
 
         joint_pos[row_idx, finger_joints[6]] = finger_joint_position
         joint_pos[row_idx, finger_joints[7]] = finger_joint_position
+
+def set_finger_joint_pos_2f_85(
+    joint_pos: torch.Tensor,
+    env_ids_list: list[int],
+    finger_joints: list[int],
+    finger_joint_position: float,
+):
+    # Get hand close positions for each environment based on gear type
+    for row_idx, env_id in enumerate(env_ids_list):
+
+        joint_pos[row_idx, finger_joints[0]] = finger_joint_position
+
+        joint_pos[row_idx, 1:2] = -finger_joint_position
+
+        for idx in range(3, len(finger_joints)):
+            joint_pos[row_idx, idx] = -finger_joint_position
