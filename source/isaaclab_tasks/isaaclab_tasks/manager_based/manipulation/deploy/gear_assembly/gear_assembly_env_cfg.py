@@ -62,7 +62,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=128,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -87,7 +87,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=128,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -112,7 +112,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=128,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -137,7 +137,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=128,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -292,7 +292,7 @@ class GearAssemblyEnvCfg(ManagerBasedRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         physx=PhysxCfg(
             gpu_collision_stack_size=2
-            ** 28,  # Important to prevent collisionStackSize buffer overflow in contact-rich environments.
+            ** 31,  # Important to prevent collisionStackSize buffer overflow in contact-rich environments.
             gpu_max_rigid_contact_count=2**23,
             gpu_max_rigid_patch_count=2**23,
         ),
