@@ -436,7 +436,7 @@ First, launch the training with a small number of environments and visualization
 
 This will open the Isaac Sim viewer where you can observe the training process in real-time.
 
-.. figure:: ../../_static/setup/walkthrough_sim_real_gear_assembly_train_4.png
+.. figure:: ../../_static/setup/walkthrough_sim_real_gear_assembly_train.png
     :align: center
     :figwidth: 100%
     :alt: Gear assembly training visualization in Isaac Lab

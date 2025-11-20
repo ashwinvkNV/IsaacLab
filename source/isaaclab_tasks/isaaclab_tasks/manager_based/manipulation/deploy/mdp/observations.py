@@ -10,12 +10,14 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
+from isaacsim.core.utils.torch.transformations import tf_combine
+
 from isaaclab.assets import RigidObject
 from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCfg
-from isaacsim.core.utils.torch.transformations import tf_combine
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
+
     from .events import RandomizeGearType
 
 

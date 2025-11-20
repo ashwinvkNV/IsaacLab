@@ -3,17 +3,16 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from isaaclab.assets import ArticulationCfg, RigidObjectCfg
 from isaaclab.utils import configclass
-from isaaclab.assets import ArticulationCfg
-from isaaclab.assets import RigidObjectCfg
 
-from .joint_pos_env_cfg import UR10e2F140GearAssemblyEnvCfg, UR10e2F85GearAssemblyEnvCfg
+from .joint_pos_env_cfg import UR10e2F85GearAssemblyEnvCfg, UR10e2F140GearAssemblyEnvCfg
 
 
 @configclass
 class UR10e2F140GearAssemblyROSInferenceEnvCfg(UR10e2F140GearAssemblyEnvCfg):
     """Configuration for ROS inference with UR10e and Robotiq 2F-140 gripper.
-    
+
     This configuration:
     - Exposes variables needed for ROS inference
     - Overrides robot and gear initial poses for fixed/deterministic setup
@@ -54,12 +53,12 @@ class UR10e2F140GearAssemblyROSInferenceEnvCfg(UR10e2F140GearAssemblyEnvCfg):
         # These joint positions are tuned for a good starting configuration
         self.scene.robot.init_state = ArticulationCfg.InitialStateCfg(
             joint_pos={
-                "shoulder_pan_joint": 2.7228e+00,
+                "shoulder_pan_joint": 2.7228,
                 "shoulder_lift_joint": -8.3962e-01,
-                "elbow_joint": 1.3684e+00,
-                "wrist_1_joint": -2.1048e+00,
-                "wrist_2_joint": -1.5691e+00,
-                "wrist_3_joint": -1.9896e+00,
+                "elbow_joint": 1.3684,
+                "wrist_1_joint": -2.1048,
+                "wrist_2_joint": -1.5691,
+                "wrist_3_joint": -1.9896,
                 "finger_joint": 0.0,
                 ".*_inner_finger_joint": 0.0,
                 ".*_inner_finger_pad_joint": 0.0,
@@ -94,10 +93,11 @@ class UR10e2F140GearAssemblyROSInferenceEnvCfg(UR10e2F140GearAssemblyEnvCfg):
             rot=(-0.70711, 0.0, 0.0, 0.70711),
         )
 
+
 @configclass
 class UR10e2F85GearAssemblyROSInferenceEnvCfg(UR10e2F85GearAssemblyEnvCfg):
     """Configuration for ROS inference with UR10e and Robotiq 2F-85 gripper.
-    
+
     This configuration:
     - Exposes variables needed for ROS inference
     - Overrides robot and gear initial poses for fixed/deterministic setup
@@ -139,12 +139,12 @@ class UR10e2F85GearAssemblyROSInferenceEnvCfg(UR10e2F85GearAssemblyEnvCfg):
         # These joint positions are tuned for a good starting configuration
         self.scene.robot.init_state = ArticulationCfg.InitialStateCfg(
             joint_pos={
-                "shoulder_pan_joint": 2.7228e+00,
+                "shoulder_pan_joint": 2.7228,
                 "shoulder_lift_joint": -8.3962e-01,
-                "elbow_joint": 1.3684e+00,
-                "wrist_1_joint": -2.1048e+00,
-                "wrist_2_joint": -1.5691e+00,
-                "wrist_3_joint": -1.9896e+00,
+                "elbow_joint": 1.3684,
+                "wrist_1_joint": -2.1048,
+                "wrist_2_joint": -1.5691,
+                "wrist_3_joint": -1.9896,
                 "finger_joint": 0.0,
                 ".*_inner_finger_joint": 0.0,
                 ".*_inner_finger_knuckle_joint": 0.0,

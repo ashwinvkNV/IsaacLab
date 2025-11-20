@@ -180,8 +180,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*finger"),
-            "static_friction_range": (5.0, 5.0),
-            "dynamic_friction_range": (5.0, 5.0),
+            "static_friction_range": (1000.0, 1000.0),
+            "dynamic_friction_range": (1000.0, 1000.0),
             "restitution_range": (0.0, 0.0),
             "num_buckets": 16,
         },
@@ -461,15 +461,24 @@ class UR10e2F85GearAssemblyEnvCfg(UR10eGearAssemblyEnvCfg):
             friction=0.0,
             armature=0.0,
         )
+        self.scene.robot.actuators["gripper_drive"] = ImplicitActuatorCfg(
+            joint_names_expr=["finger_joint"],
+            effort_limit_sim=10.0,
+            velocity_limit_sim=1.0,
+            stiffness=40.0,
+            damping=1.0,
+            friction=0.0,
+            armature=0.0,
+        )
 
         # Set gripper-specific joint setter function
         self.gripper_joint_setter_func = set_finger_joint_pos_robotiq_2f85
 
         # gear offsets and grasp positions for the 2F-85 gripper
         self.gear_offsets_grasp = {
-            "gear_small": [0.0, self.gear_offsets["gear_small"][0], -0.18],
-            "gear_medium": [0.0, self.gear_offsets["gear_medium"][0], -0.18],
-            "gear_large": [0.0, self.gear_offsets["gear_large"][0], -0.18],
+            "gear_small": [0.0, self.gear_offsets["gear_small"][0], -0.19],
+            "gear_medium": [0.0, self.gear_offsets["gear_medium"][0], -0.19],
+            "gear_large": [0.0, self.gear_offsets["gear_large"][0], -0.19],
         }
 
         # Grasp widths for 2F-85 gripper

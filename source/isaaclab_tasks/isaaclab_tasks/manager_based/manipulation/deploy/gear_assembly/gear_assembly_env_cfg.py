@@ -3,24 +3,24 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from dataclasses import MISSING
 import os
+from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import ActionTermCfg as ActionTerm
 from isaaclab.managers import EventTermCfg as EventTerm
-
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab.sim.simulation_cfg import PhysxCfg, SimulationCfg
 from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sim.simulation_cfg import PhysxCfg, SimulationCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import ResetSampledNoiseModelCfg, UniformNoiseCfg
+
 import isaaclab_tasks.manager_based.manipulation.deploy.mdp as mdp
 import isaaclab_tasks.manager_based.manipulation.deploy.mdp.terminations as gear_assembly_terminations
 
@@ -32,10 +32,11 @@ ASSETS_DIR = os.path.join(CONFIG_DIR, "assets")
 # Environment configuration
 ##
 
+
 @configclass
 class GearAssemblySceneCfg(InteractiveSceneCfg):
     """Configuration for the scene with a robotic arm."""
-    
+
     # Disable scene replication to allow USD-level randomization
     replicate_physics = False
 
@@ -145,17 +146,16 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(-1.0200, 0.2100, -0.1), rot=(0.70711, 0.0, 0.0, 0.70711)),
     )
-    
 
     # robots
     robot: ArticulationCfg = MISSING
-
 
     # lights
     light = AssetBaseCfg(
         prim_path="/World/light",
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=2500.0),
     )
+
 
 @configclass
 class ActionsCfg:
@@ -174,32 +174,26 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos = ObsTerm(func=mdp.joint_pos,
-                            params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
-        joint_vel = ObsTerm(func=mdp.joint_vel,
-                            params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
+        joint_pos = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
+        joint_vel = ObsTerm(func=mdp.joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
         gear_shaft_pos = ObsTerm(
             func=mdp.GearShaftPosW,
             params={},  # Will be populated in __post_init__
-            noise=ResetSampledNoiseModelCfg(
-                noise_cfg=UniformNoiseCfg(n_min=-0.005, n_max=0.005, operation="add")
-            )
+            noise=ResetSampledNoiseModelCfg(noise_cfg=UniformNoiseCfg(n_min=-0.005, n_max=0.005, operation="add")),
         )
         gear_shaft_quat = ObsTerm(func=mdp.GearShaftQuatW)
 
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = True
-    
+
     @configclass
     class CriticCfg(ObsGroup):
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        joint_pos = ObsTerm(func=mdp.joint_pos,
-                            params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
-        joint_vel = ObsTerm(func=mdp.joint_vel,
-                            params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
+        joint_pos = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
+        joint_vel = ObsTerm(func=mdp.joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
         gear_shaft_pos = ObsTerm(func=mdp.GearShaftPosW, params={})  # Will be populated in __post_init__
         gear_shaft_quat = ObsTerm(func=mdp.GearShaftQuatW)
 
@@ -214,7 +208,6 @@ class ObservationsCfg:
 @configclass
 class EventCfg:
     """Configuration for events."""
-
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
@@ -241,7 +234,7 @@ class RewardsCfg:
         func=mdp.KeypointEntityError,
         weight=-1.5,
         params={
-            "asset_cfg_1": SceneEntityCfg("factory_gear_base"), 
+            "asset_cfg_1": SceneEntityCfg("factory_gear_base"),
             "keypoint_scale": 0.15,
         },
     )
@@ -250,7 +243,7 @@ class RewardsCfg:
         func=mdp.KeypointEntityErrorExp,
         weight=1.5,
         params={
-            "asset_cfg_1": SceneEntityCfg("factory_gear_base"), 
+            "asset_cfg_1": SceneEntityCfg("factory_gear_base"),
             "kp_exp_coeffs": [(50, 0.0001), (300, 0.0001)],
             "kp_use_sum_of_exps": False,
             "keypoint_scale": 0.15,
@@ -265,7 +258,7 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    
+
     gear_dropped = DoneTerm(
         func=gear_assembly_terminations.ResetWhenGearDropped,
         params={
@@ -284,6 +277,7 @@ class TerminationsCfg:
         },
     )
 
+
 @configclass
 class GearAssemblyEnvCfg(ManagerBasedRLEnvCfg):
     # Scene settings
@@ -296,14 +290,14 @@ class GearAssemblyEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
     sim: SimulationCfg = SimulationCfg(
-
         physx=PhysxCfg(
-            gpu_collision_stack_size=2**28,  # Important to prevent collisionStackSize buffer overflow in contact-rich environments.
+            gpu_collision_stack_size=2
+            ** 28,  # Important to prevent collisionStackSize buffer overflow in contact-rich environments.
             gpu_max_rigid_contact_count=2**23,
-            gpu_max_rigid_patch_count=2**23
+            gpu_max_rigid_patch_count=2**23,
         ),
     )
-    
+
     def __post_init__(self):
         """Post initialization."""
         # general settings
@@ -314,10 +308,12 @@ class GearAssemblyEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render_interval = self.decimation
         self.sim.dt = 1.0 / 120.0
 
-        self.gear_offsets = {'gear_small': [0.076125, 0.0, 0.0],
-                            'gear_medium': [0.030375, 0.0, 0.0],
-                            'gear_large': [-0.045375, 0.0, 0.0]}
-        
+        self.gear_offsets = {
+            "gear_small": [0.076125, 0.0, 0.0],
+            "gear_medium": [0.030375, 0.0, 0.0],
+            "gear_large": [-0.045375, 0.0, 0.0],
+        }
+
         # Populate observation term parameters with gear offsets
         self.observations.policy.gear_shaft_pos.params["gear_offsets"] = self.gear_offsets
         self.observations.critic.gear_shaft_pos.params["gear_offsets"] = self.gear_offsets

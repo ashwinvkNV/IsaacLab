@@ -190,6 +190,7 @@ class NoiseModelWithAdditiveBias(NoiseModel):
             self.reset()
         return super().__call__(data) + self._bias
 
+
 class ResetSampledNoiseModel(NoiseModel):
     """Noise model that samples noise ONLY during reset and applies it consistently.
 
@@ -219,15 +220,16 @@ class ResetSampledNoiseModel(NoiseModel):
         # resolve the environment ids
         if env_ids is None:
             env_ids = slice(None)
-        
+
         # Use the existing noise function to sample new noise
         # Create dummy data to sample from the noise function
-        dummy_data = torch.zeros((env_ids.stop - env_ids.start if isinstance(env_ids, slice) else len(env_ids), 1), 
-                                device=self._device)
-        
+        dummy_data = torch.zeros(
+            (env_ids.stop - env_ids.start if isinstance(env_ids, slice) else len(env_ids), 1), device=self._device
+        )
+
         # Sample noise using the configured noise function
         sampled_noise = self._noise_model_cfg.noise_cfg.func(dummy_data, self._noise_model_cfg.noise_cfg)
-        
+
         self._sampled_noise[env_ids] = sampled_noise
 
     def __call__(self, data: torch.Tensor) -> torch.Tensor:
@@ -247,7 +249,7 @@ class ResetSampledNoiseModel(NoiseModel):
             *_, self._num_components = data.shape
             # expand noise from (num_envs,1) to (num_envs, num_components)
             self._sampled_noise = self._sampled_noise.repeat(1, self._num_components)
-        
+
         # apply the noise based on operation
         if self._noise_cfg.operation == "add":
             return data + self._sampled_noise
