@@ -49,6 +49,15 @@ class UR10e2F140GearAssemblyROSInferenceEnvCfg(UR10e2F140GearAssemblyEnvCfg):
             self.joint_action_scale,
         ]
 
+        # Fixed asset parameters for ROS inference
+        self.fixed_asset_init_pos_center = [1.02, -0.21, -0.1]
+        self.fixed_asset_init_pos_range = [0.1, 0.25, 0.1]
+        self.fixed_asset_init_orn_deg = [0.0, 0.0, -90.0]
+        self.fixed_asset_init_orn_deg_range = [2.0, 2.0, 30.0]
+        self.fixed_asset_pos_obs_noise_level = [0.0025, 0.0025, 0.0025]
+
+        
+
         # Override robot initial pose for ROS inference (fixed pose, no randomization)
         # These joint positions are tuned for a good starting configuration
         self.scene.robot.init_state = ArticulationCfg.InitialStateCfg(
@@ -134,6 +143,13 @@ class UR10e2F85GearAssemblyROSInferenceEnvCfg(UR10e2F85GearAssemblyEnvCfg):
             self.joint_action_scale,
             self.joint_action_scale,
         ]
+
+        # Fixed asset parameters for ROS inference
+        self.fixed_asset_init_pos_center = [1.02, -0.21, -0.1]
+        self.fixed_asset_init_pos_range = [0.1, 0.25, 0.1]
+        self.fixed_asset_init_orn_deg = [0.0, 0.0, -90.0]
+        self.fixed_asset_init_orn_deg_range = [2.0, 2.0, 30.0]
+        self.fixed_asset_pos_obs_noise_level = [0.0025, 0.0025, 0.0025]
 
         # Override robot initial pose for ROS inference (fixed pose, no randomization)
         # These joint positions are tuned for a good starting configuration
