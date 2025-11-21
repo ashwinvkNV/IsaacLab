@@ -359,10 +359,10 @@ class UR10e2F140GearAssemblyEnvCfg(UR10eGearAssemblyEnvCfg):
         # 2F-140 gripper actuator configuration
         self.scene.robot.actuators["gripper_finger"] = ImplicitActuatorCfg(
             joint_names_expr=[".*_inner_finger_joint"],
-            effort_limit_sim=10.0,
-            velocity_limit_sim=10.0,
-            stiffness=10.0,
-            damping=0.05,
+            effort_limit_sim=1.0,
+            velocity_limit_sim=1.0,
+            stiffness=2.0,
+            damping=0.01,
             friction=0.0,
             armature=0.0,
         )
