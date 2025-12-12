@@ -10,7 +10,7 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
-from isaacsim.core.utils.torch.transformations import tf_combine
+from isaaclab.utils.math import combine_frame_transforms
 
 from isaaclab.assets import RigidObject
 from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCfg
@@ -118,7 +118,7 @@ class GearShaftPosW(ManagerTermBase):
         self.offsets_buffer = self.gear_offsets_stacked[gear_type_indices]
 
         # Transform offsets
-        _, shaft_pos = tf_combine(base_quat, base_pos, self.identity_quat, self.offsets_buffer)
+        shaft_pos, _ = combine_frame_transforms(base_pos, base_quat, self.offsets_buffer, self.identity_quat)
 
         return shaft_pos - env.scene.env_origins
 
@@ -159,7 +159,8 @@ class GearShaftQuatW(ManagerTermBase):
         # Get base quaternion
         base_quat = self.asset.data.root_quat_w
 
-        # Ensure w component is positive
+        # Ensure w component is positive (q and -q represent the same rotation)
+        # Pick one canonical form to reduce observation variation seen by the policy
         w_negative = base_quat[:, 0] < 0
         positive_quat = base_quat.clone()
         positive_quat[w_negative] = -base_quat[w_negative]
@@ -290,7 +291,8 @@ class GearQuatW(ManagerTermBase):
         # Select gear quaternions using advanced indexing
         gear_quat = all_gear_quat[self.env_indices, self.gear_type_indices]
 
-        # Ensure w component is positive
+        # Ensure w component is positive (q and -q represent the same rotation)
+        # Pick one canonical form to reduce observation variation seen by the policy
         w_negative = gear_quat[:, 0] < 0
         gear_positive_quat = gear_quat.clone()
         gear_positive_quat[w_negative] = -gear_quat[w_negative]
