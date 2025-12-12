@@ -20,10 +20,11 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim.simulation_cfg import PhysxCfg, SimulationCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.noise import ResetSampledNoiseModelCfg, UniformNoiseCfg
+from isaaclab.utils.noise import UniformNoiseCfg
 
 import isaaclab_tasks.manager_based.manipulation.deploy.mdp as mdp
 import isaaclab_tasks.manager_based.manipulation.deploy.mdp.terminations as gear_assembly_terminations
+from isaaclab_tasks.manager_based.manipulation.deploy.mdp.noise_models import ResetSampledConstantNoiseModelCfg
 
 # Get the directory where this configuration file is located
 CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -63,7 +64,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=196,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -88,7 +89,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=196,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -113,7 +114,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=196,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -138,7 +139,7 @@ class GearAssemblySceneCfg(InteractiveSceneCfg):
                 max_linear_velocity=1000.0,
                 max_angular_velocity=3666.0,
                 enable_gyroscopic_forces=True,
-                solver_position_iteration_count=32,
+                solver_position_iteration_count=196,
                 solver_velocity_iteration_count=1,
                 max_contact_impulse=1e32,
             ),
@@ -187,7 +188,7 @@ class ObservationsCfg:
         gear_shaft_pos = ObsTerm(
             func=mdp.GearShaftPosW,
             params={},  # Will be populated in __post_init__
-            noise=ResetSampledNoiseModelCfg(noise_cfg=UniformNoiseCfg(n_min=-0.005, n_max=0.005, operation="add")),
+            noise=ResetSampledConstantNoiseModelCfg(noise_cfg=UniformNoiseCfg(n_min=-0.005, n_max=0.005, operation="add")),
         )
         gear_shaft_quat = ObsTerm(func=mdp.GearShaftQuatW)
 
@@ -300,7 +301,7 @@ class GearAssemblyEnvCfg(ManagerBasedRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         physx=PhysxCfg(
             # Important to prevent collisionStackSize buffer overflow in contact-rich environments.
-            gpu_collision_stack_size=2**28,
+            gpu_collision_stack_size=2**31,
             gpu_max_rigid_contact_count=2**23,
             gpu_max_rigid_patch_count=2**23,
         ),
