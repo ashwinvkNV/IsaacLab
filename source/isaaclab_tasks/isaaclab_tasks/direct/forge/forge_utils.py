@@ -22,14 +22,21 @@ def get_random_prop_gains(default_values, noise_levels, num_envs, device):
 
 
 def change_FT_frame(source_F, source_T, source_frame, target_frame):
-    """Convert force/torque reading from source to target frame."""
+    """Convert force/torque reading from source to target frame.
+
+    Args:
+        source_F: Source force (N, 3)
+        source_T: Source torque (N, 3)
+        source_frame: Source frame as (quat, pos) tuple
+        target_frame: Target frame as (quat, pos) tuple
+    """
     # Modern Robotics eq. 3.95
-    # Compute inverse of source frame: (pos, quat) -> (quat_inv, -quat_apply(quat_inv, pos))
-    source_quat_inv = quat_inv(source_frame[1])
-    source_pos_inv = quat_apply(source_quat_inv, -source_frame[0])
+    # Compute inverse of source frame: (quat, pos) -> (quat_inv, -quat_apply(quat_inv, pos))
+    source_quat_inv = quat_inv(source_frame[0])
+    source_pos_inv = quat_apply(source_quat_inv, -source_frame[1])
     # Combine transforms: target_T_source = source_inv * target
     target_T_source_pos, target_T_source_quat = combine_frame_transforms(
-        source_pos_inv, source_quat_inv, target_frame[0], target_frame[1]
+        source_pos_inv, source_quat_inv, target_frame[1], target_frame[0]
     )
     target_F = quat_apply(target_T_source_quat, source_F)
     target_T = quat_apply(target_T_source_quat, (source_T + torch.cross(target_T_source_pos, source_F, dim=-1)))
