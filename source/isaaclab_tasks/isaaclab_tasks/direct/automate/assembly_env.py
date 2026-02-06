@@ -301,18 +301,18 @@ class AssemblyEnv(DirectRLEnv):
         self.joint_vel = self._robot.data.joint_vel.clone()
 
         # Compute pose of gripper goal and top of socket in socket frame
-        self.gripper_goal_quat, self.gripper_goal_pos = combine_frame_transforms(
-            self.fixed_quat,
+        self.gripper_goal_pos, self.gripper_goal_quat = combine_frame_transforms(
             self.fixed_pos,
-            self.plug_grasp_quat_local,
+            self.fixed_quat,
             self.plug_grasp_pos_local,
+            self.plug_grasp_quat_local,
         )
 
-        self.gripper_goal_quat, self.gripper_goal_pos = combine_frame_transforms(
-            self.gripper_goal_quat,
+        self.gripper_goal_pos, self.gripper_goal_quat = combine_frame_transforms(
             self.gripper_goal_pos,
-            self.robot_to_gripper_quat,
+            self.gripper_goal_quat,
             self.palm_to_finger_center,
+            self.robot_to_gripper_quat,
         )
 
         # Finite-differencing results in more reliable velocity estimates.
@@ -331,24 +331,24 @@ class AssemblyEnv(DirectRLEnv):
         self.prev_joint_pos = self.joint_pos[:, 0:7].clone()
 
         # Keypoint tensors.
-        self.held_base_quat[:], self.held_base_pos[:] = combine_frame_transforms(
-            self.held_quat, self.held_pos, self.held_base_quat_local, self.held_base_pos_local
+        self.held_base_pos[:], self.held_base_quat[:] = combine_frame_transforms(
+            self.held_pos, self.held_quat, self.held_base_pos_local, self.held_base_quat_local
         )
-        self.target_held_base_quat[:], self.target_held_base_pos[:] = combine_frame_transforms(
-            self.fixed_quat, self.fixed_pos, self.identity_quat, self.fixed_success_pos_local
+        self.target_held_base_pos[:], self.target_held_base_quat[:] = combine_frame_transforms(
+            self.fixed_pos, self.fixed_quat, self.fixed_success_pos_local, self.identity_quat
         )
 
         # Compute pos of keypoints on held asset, and fixed asset in world frame
         for idx, keypoint_offset in enumerate(self.keypoint_offsets):
             self.keypoints_held[:, idx] = combine_frame_transforms(
-                self.held_base_quat, self.held_base_pos, self.identity_quat, keypoint_offset.repeat(self.num_envs, 1)
-            )[1]
+                self.held_base_pos, self.held_base_quat, keypoint_offset.repeat(self.num_envs, 1), self.identity_quat
+            )[0]
             self.keypoints_fixed[:, idx] = combine_frame_transforms(
-                self.target_held_base_quat,
                 self.target_held_base_pos,
-                self.identity_quat,
+                self.target_held_base_quat,
                 keypoint_offset.repeat(self.num_envs, 1),
-            )[1]
+                self.identity_quat,
+            )[0]
 
         self.keypoint_dist = torch.norm(self.keypoints_held - self.keypoints_fixed, p=2, dim=-1).mean(-1)
         self.last_update_timestamp = self._robot._data._sim_timestamp
@@ -668,18 +668,18 @@ class AssemblyEnv(DirectRLEnv):
     def _move_gripper_to_grasp_pose(self, env_ids):
         """Define grasp pose for plug and move gripper to pose."""
 
-        gripper_goal_quat, gripper_goal_pos = combine_frame_transforms(
-            self.held_quat,
+        gripper_goal_pos, gripper_goal_quat = combine_frame_transforms(
             self.held_pos,
-            self.plug_grasp_quat_local,
+            self.held_quat,
             self.plug_grasp_pos_local,
+            self.plug_grasp_quat_local,
         )
 
-        gripper_goal_quat, gripper_goal_pos = combine_frame_transforms(
-            gripper_goal_quat,
+        gripper_goal_pos, gripper_goal_quat = combine_frame_transforms(
             gripper_goal_pos,
-            self.robot_to_gripper_quat,
+            gripper_goal_quat,
             self.palm_to_finger_center,
+            self.robot_to_gripper_quat,
         )
 
         # Set target_pos
@@ -832,8 +832,8 @@ class AssemblyEnv(DirectRLEnv):
         fixed_tip_pos_local[:, 2] += self.cfg_task.fixed_asset_cfg.height
         fixed_tip_pos_local[:, 2] += self.cfg_task.fixed_asset_cfg.base_height
 
-        _, fixed_tip_pos = combine_frame_transforms(
-            self.fixed_quat, self.fixed_pos, self.identity_quat, fixed_tip_pos_local
+        fixed_tip_pos, _ = combine_frame_transforms(
+            self.fixed_pos, self.fixed_quat, fixed_tip_pos_local, self.identity_quat
         )
         self.fixed_pos_obs_frame[:] = fixed_tip_pos
 
