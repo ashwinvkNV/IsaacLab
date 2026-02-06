@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 
-import isaacsim.core.utils.torch as torch_utils
 from isaacsim.core.simulation_manager import SimulationManager
 from pxr import Usd, UsdGeom, UsdPhysics
 
@@ -23,6 +22,7 @@ import isaaclab.utils.math as math_utils
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.sensors.camera import Camera, TiledCamera
 from isaaclab.sensors.sensor_base import SensorBase
+from isaaclab.utils.math import quat_apply, quat_inv, transform_points
 
 from .visuotactile_render import GelsightRender
 from .visuotactile_sensor_data import VisuoTactileSensorData
@@ -674,17 +674,13 @@ class VisuoTactileSensor(SensorBase):
             Points in contact object local coordinates and inverse quaternions
         """
         # Get inverse transformation (per environment)
-        # wxyz in torch
-        contact_object_quat_inv, contact_object_pos_inv = torch_utils.tf_inverse(
-            contact_object_quat_w, contact_object_pos_w
-        )
-        num_pts = self.num_tactile_points
+        # Compute inverse: quat_inv and -quat_apply(quat_inv, pos)
+        contact_object_quat_inv = quat_inv(contact_object_quat_w)
+        contact_object_pos_inv = quat_apply(contact_object_quat_inv, -contact_object_pos_w)
 
-        contact_object_quat_expanded = contact_object_quat_inv.unsqueeze(1).expand(-1, num_pts, 4)
-        contact_object_pos_expanded = contact_object_pos_inv.unsqueeze(1).expand(-1, num_pts, 3)
-
-        # Apply transformation
-        points_sdf = torch_utils.tf_apply(contact_object_quat_expanded, contact_object_pos_expanded, world_points)
+        # Apply transformation to points
+        # transform_points expects (points, pos, quat) and applies: quat_apply(quat, points) + pos
+        points_sdf = transform_points(world_points, contact_object_pos_inv, contact_object_quat_inv)
 
         return points_sdf, contact_object_quat_inv
 

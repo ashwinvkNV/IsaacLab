@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import torch
 
-import isaacsim.core.utils.torch as torch_utils
-from isaacsim.core.utils.torch.rotations import compute_heading_and_up, compute_rot, quat_conjugate
+from isaacsim.core.utils.torch.rotations import compute_heading_and_up, compute_rot
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
+from isaaclab.utils.math import quat_conjugate, unscale_transform
 
 
 def normalize_angle(x):
@@ -256,7 +256,7 @@ def compute_intermediate_values(
         torso_quat, velocity, ang_velocity, targets, torso_position
     )
 
-    dof_pos_scaled = torch_utils.maths.unscale(dof_pos, dof_lower_limits, dof_upper_limits)
+    dof_pos_scaled = unscale_transform(dof_pos, dof_lower_limits, dof_upper_limits)
 
     to_target = targets - torso_position
     to_target[:, 2] = 0.0
