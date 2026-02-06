@@ -117,11 +117,9 @@ class gear_shaft_pos_w(ManagerTermBase):
             Gear shaft position tensor of shape (num_envs, 3)
         """
         # Check if gear type manager exists
+        # During initialization, return zeros since the manager hasn't been created yet
         if not hasattr(env, "_gear_type_manager"):
-            raise RuntimeError(
-                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
-                "in your environment's event configuration before this observation term is used."
-            )
+            return torch.zeros(env.num_envs, 3, device=env.device)
 
         gear_type_manager: randomize_gear_type = env._gear_type_manager
         # Get gear type indices directly as tensor (no Python loops!)
@@ -238,11 +236,9 @@ class gear_pos_w(ManagerTermBase):
             Gear position tensor of shape (num_envs, 3)
         """
         # Check if gear type manager exists
+        # During initialization, return zeros since the manager hasn't been created yet
         if not hasattr(env, "_gear_type_manager"):
-            raise RuntimeError(
-                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
-                "in your environment's event configuration before this observation term is used."
-            )
+            return torch.zeros(env.num_envs, 3, device=env.device)
 
         gear_type_manager: randomize_gear_type = env._gear_type_manager
         # Get gear type indices directly as tensor (no Python loops!)
@@ -310,11 +306,9 @@ class gear_quat_w(ManagerTermBase):
             Gear orientation tensor of shape (num_envs, 4)
         """
         # Check if gear type manager exists
+        # During initialization, return zeros since the manager hasn't been created yet
         if not hasattr(env, "_gear_type_manager"):
-            raise RuntimeError(
-                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
-                "in your environment's event configuration before this observation term is used."
-            )
+            return torch.zeros(env.num_envs, 3, device=env.device)
 
         gear_type_manager: randomize_gear_type = env._gear_type_manager
         # Get gear type indices directly as tensor (no Python loops!)

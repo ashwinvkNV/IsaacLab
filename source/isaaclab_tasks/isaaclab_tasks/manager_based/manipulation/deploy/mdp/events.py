@@ -208,7 +208,17 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         # Find all joints once
         all_joints, all_joints_names = self.robot_asset.find_joints([".*"])
         self.all_joints = all_joints
+
+        # Gripper joints: all joints after the arm joints (includes controllable + mimic joints)
+        # This is used by the gripper_joint_setter_func
         self.finger_joints = all_joints[self.num_arm_joints :]
+
+        # Get gripper joint names in order for debugging
+        gripper_joint_names = all_joints_names[self.num_arm_joints :]
+        print(f"\nGripper joints setup (indices and names in order):")
+        for i, (idx, name) in enumerate(zip(self.finger_joints, gripper_joint_names)):
+            print(f"  [{i}] index {idx}: '{name}'")
+        print()
 
     def __call__(
         self,
@@ -217,7 +227,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
         pos_threshold: float = 1e-6,
         rot_threshold: float = 1e-6,
-        max_iterations: int = 10,
+        max_iterations: int = 50,
         pos_randomization_range: dict | None = None,
         gear_offsets_grasp: dict | None = None,
         end_effector_body_name: str | None = None,
@@ -319,26 +329,20 @@ class set_robot_to_grasp_pose(ManagerTermBase):
                 jacobian_type="geometric",
                 rot_error_type="axis_angle",
             )
-            # Only use position error, ignore rotation
-            zero_rot_error = torch.zeros_like(axis_angle_error)
-            delta_hand_pose = torch.cat((pos_error, zero_rot_error), dim=-1)
+            delta_hand_pose = torch.cat((pos_error, axis_angle_error), dim=-1)
 
-            # Check convergence (only position, not rotation)
+            # Check convergence
             pos_error_norm = torch.norm(pos_error, dim=-1)
             rot_error_norm = torch.norm(axis_angle_error, dim=-1)
 
+            # print(f"pos_error_norm: {pos_error_norm}")
+            # print(f"rot_error_norm: {rot_error_norm}")
 
-            print(f"pos_error_norm: {pos_error_norm}")
-            print(f"rot_error_norm: {rot_error_norm}")
-            print(f"axis_angle_error: {axis_angle_error}")
-            print(f"eef_quat: {eef_quat}")
-            print(f"grasp_object_quat: {grasp_object_quat}")
-
-            if torch.all(pos_error_norm < pos_threshold):
+            if torch.all(pos_error_norm < pos_threshold) and torch.all(rot_error_norm < rot_threshold):
                 break
 
             # Solve IK using jacobian
-            jacobians = self.robot_asset.root_physx_view.get_jacobians().clone()
+            jacobians = self.robot_asset.root_view.get_jacobians().clone()
             jacobian = jacobians[env_ids, self.jacobi_body_idx, :, :]
 
             delta_dof_pos = fc._get_delta_dof_pos(
@@ -350,6 +354,8 @@ class set_robot_to_grasp_pose(ManagerTermBase):
 
             # Update joint positions
             joint_pos = joint_pos + delta_dof_pos
+            # Wrap joint angles to ±π to prevent accumulation beyond joint limits
+            joint_pos = torch.atan2(torch.sin(joint_pos), torch.cos(joint_pos))
             joint_vel = torch.zeros_like(joint_pos)
 
             # Write to sim
@@ -357,13 +363,13 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             self.robot_asset.set_joint_velocity_target(joint_vel, env_ids=env_ids)
             self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
-            for _ in range(5):
-                env.sim.render()
-                input("Press Enter to continue...")
 
-        for _ in range(5):
-            env.sim.render()
-            input("Press Enter to continue outside loop...")
+        # for _ in range(5):
+        #     env.sim.render()
+        #     input("Press Enter to continue outside loop...")
+
+        # Reset joint velocities to zero after IK convergence
+        joint_vel = torch.zeros_like(self.robot_asset.data.joint_vel[env_ids])
 
         # Set gripper to grasp position
         joint_pos = self.robot_asset.data.joint_pos[env_ids].clone()
@@ -377,6 +383,10 @@ class set_robot_to_grasp_pose(ManagerTermBase):
 
         self.robot_asset.set_joint_position_target(joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
         self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+
+        # for _ in range(5):
+        #     env.sim.render()
+        #     input("Press Enter to continue outside loop after setting gripper to grasp position...")
 
         # Set gripper to closed position
         for row_idx, env_id in enumerate(env_ids.tolist()):

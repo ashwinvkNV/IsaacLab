@@ -26,7 +26,7 @@ RIZON4S_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path="omniverse://isaac-dev.ov.nvidia.com/Projects/isaac_ros_gear_insertion/Rizon4s_with_Grav.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            disable_gravity=True,
+            disable_gravity=False,
             max_depenetration_velocity=5.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
@@ -50,8 +50,8 @@ RIZON4S_CFG = ArticulationCfg(
     actuators={
         "arm": ImplicitActuatorCfg(
             joint_names_expr=["joint[1-7]"],
-            stiffness=800.0,
-            damping=40.0,
+            stiffness={"joint[1-2]": 6000.0, "joint[3-4]": 4200.0, "joint[5-7]": 1500.0},
+            damping={"joint[1-2]": 108.5, "joint[3-4]": 90.7, "joint[5-7]": 54.2},
             friction=0.0,
             armature=0.0,
         ),
@@ -71,11 +71,11 @@ RIZON4S_GRAV_CFG.init_state.joint_pos["right_outer_finger_joint"] = 0.0
 
 # Grav gripper actuator configuration
 RIZON4S_GRAV_CFG.actuators["gripper"] = ImplicitActuatorCfg(
-    joint_names_expr=["finger_joint|.*finger_joint"],
+    joint_names_expr=["finger_joint"],  # Only main controllable joint; mimics with -1 gearing follow automatically
     effort_limit_sim=200.0,
-    velocity_limit_sim=0.2,
+    velocity_limit_sim=0.6,
     stiffness=2e3,
-    damping=1e2,
+    damping=1e1,
     friction=0.0,
     armature=0.0,
 )

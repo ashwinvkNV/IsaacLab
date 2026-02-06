@@ -9,7 +9,7 @@ import torch
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
-from isaaclab.assets import ArticulationCfg
+from isaaclab.assets import ArticulationCfg, RigidObjectCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
@@ -40,18 +40,33 @@ def set_finger_joint_pos_grav(
     Args:
         joint_pos: Joint positions tensor
         reset_ind_joint_pos: Row indices into the sliced joint_pos tensor
-        finger_joints: List of finger joint indices
-        finger_joint_position: Target position for finger joints
+        finger_joints: List of all gripper joint indices (6 joints total)
+        finger_joint_position: Target position for main finger joint
+
+    Note:
+        Grav gripper joint structure (indices from finger_joints list):
+        [0] finger_joint - main controllable joint
+        [1] left_inner_knuckle_joint - mimic with -1 gearing
+        [2] right_inner_knuckle_joint - mimic with -1 gearing
+        [3] right_outer_knuckle_joint - mimic with -1 gearing
+        [4] left_outer_finger_joint - mimic with +1 gearing
+        [5] right_outer_finger_joint - mimic with +1 gearing
     """
     for idx in reset_ind_joint_pos:
-        # For Grav gripper (2 joints expected: finger_left_joint, finger_right_joint)
-        # Both fingers move symmetrically
-        if len(finger_joints) < 2:
-            raise ValueError(f"Grav gripper requires at least 2 finger joints, got {len(finger_joints)}")
+        if len(finger_joints) < 6:
+            raise ValueError(f"Grav gripper requires at least 6 finger joints, got {len(finger_joints)}")
 
-        # Set both finger joints to the same position (parallel gripper)
-        joint_pos[idx, finger_joints[0]] = finger_joint_position  # finger_left_joint
-        joint_pos[idx, finger_joints[1]] = finger_joint_position  # finger_right_joint
+        # Main controllable joint
+        joint_pos[idx, finger_joints[0]] = finger_joint_position
+
+        # Mimic joints with -1 gearing
+        joint_pos[idx, finger_joints[1]] = finger_joint_position  # left_inner_knuckle_joint
+        joint_pos[idx, finger_joints[2]] = finger_joint_position  # right_inner_knuckle_joint
+        joint_pos[idx, finger_joints[3]] = finger_joint_position  # right_outer_knuckle_joint
+
+        # Mimic joints with +1 gearing
+        joint_pos[idx, finger_joints[4]] = -finger_joint_position  # left_outer_finger_joint
+        joint_pos[idx, finger_joints[5]] = -finger_joint_position  # right_outer_finger_joint
 
 
 ##
@@ -86,41 +101,41 @@ class EventCfg:
     #     },
     # )
 
-    # small_gear_physics_material = EventTerm(
-    #     func=mdp.randomize_rigid_body_material,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("factory_gear_small", body_names=".*"),
-    #         "static_friction_range": (0.75, 0.75),
-    #         "dynamic_friction_range": (0.75, 0.75),
-    #         "restitution_range": (0.0, 0.0),
-    #         "num_buckets": 16,
-    #     },
-    # )
+    small_gear_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("factory_gear_small", body_names=".*"),
+            "static_friction_range": (0.75, 0.75),
+            "dynamic_friction_range": (0.75, 0.75),
+            "restitution_range": (0.0, 0.0),
+            "num_buckets": 16,
+        },
+    )
 
-    # medium_gear_physics_material = EventTerm(
-    #     func=mdp.randomize_rigid_body_material,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("factory_gear_medium", body_names=".*"),
-    #         "static_friction_range": (0.75, 0.75),
-    #         "dynamic_friction_range": (0.75, 0.75),
-    #         "restitution_range": (0.0, 0.0),
-    #         "num_buckets": 16,
-    #     },
-    # )
+    medium_gear_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("factory_gear_medium", body_names=".*"),
+            "static_friction_range": (0.75, 0.75),
+            "dynamic_friction_range": (0.75, 0.75),
+            "restitution_range": (0.0, 0.0),
+            "num_buckets": 16,
+        },
+    )
 
-    # large_gear_physics_material = EventTerm(
-    #     func=mdp.randomize_rigid_body_material,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("factory_gear_large", body_names=".*"),
-    #         "static_friction_range": (0.75, 0.75),
-    #         "dynamic_friction_range": (0.75, 0.75),
-    #         "restitution_range": (0.0, 0.0),
-    #         "num_buckets": 16,
-    #     },
-    # )
+    large_gear_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("factory_gear_large", body_names=".*"),
+            "static_friction_range": (0.75, 0.75),
+            "dynamic_friction_range": (0.75, 0.75),
+            "restitution_range": (0.0, 0.0),
+            "num_buckets": 16,
+        },
+    )
 
     # gear_base_physics_material = EventTerm(
     #     func=mdp.randomize_rigid_body_material,
@@ -134,23 +149,23 @@ class EventCfg:
     #     },
     # )
 
-    # Note: Rizon4s with Grav gripper doesn't have finger bodies in the USD file
-    # robot_physics_material = EventTerm(
-    #     func=mdp.randomize_rigid_body_material,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*finger"),
-    #         "static_friction_range": (0.75, 0.75),
-    #         "dynamic_friction_range": (0.75, 0.75),
-    #         "restitution_range": (0.0, 0.0),
-    #         "num_buckets": 16,
-    #     },
-    # )
+    robot_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*finger.*"),  # Matches finger_mount and finger_tip bodies
+            "static_friction_range": (3.0, 3.0),
+            "dynamic_friction_range": (3.0, 3.0),
+            "restitution_range": (0.0, 0.0),
+            "num_buckets": 16,
+        },
+    )
 
     randomize_gear_type = EventTerm(
         func=gear_assembly_events.randomize_gear_type,
         mode="reset",
-        params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
+        # params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
+        params={"gear_types": ["gear_large"]},
     )
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
@@ -161,16 +176,19 @@ class EventCfg:
         params={
             "pose_range": {
                 "x": [-0.1, 0.1],
-                "y": [-0.25, 0.25],
+                "y": [-0.1, 0.1],
                 "z": [-0.1, 0.1],
                 "roll": [-math.pi / 90, math.pi / 90],  # 2 degree
                 "pitch": [-math.pi / 90, math.pi / 90],  # 2 degree
                 "yaw": [-math.pi / 6, math.pi / 6],  # 2 degree
             },
             "gear_pos_range": {
-                "x": [-0.02, 0.02],
-                "y": [-0.02, 0.02],
-                "z": [0.0575, 0.0775],  # 0.045 + 0.0225
+                # "x": [-0.02, 0.02],
+                # "y": [-0.02, 0.02],
+                # "z": [0.0575, 0.0775],  # 0.045 + 0.0225
+                "x": [-0.0, 0.0],
+                "y": [-0.0, 0.0],
+                "z": [0.0675, 0.0675],  # 0.045 + 0.0225
             },
             "velocity_range": {},
         },
@@ -181,7 +199,8 @@ class EventCfg:
         mode="reset",
         params={
             "robot_asset_cfg": SceneEntityCfg("robot"),
-            "pos_randomization_range": {"x": [-0.0, 0.0], "y": [-0.005, 0.005], "z": [-0.003, 0.003]},
+            # "pos_randomization_range": {"x": [-0.0, 0.0], "y": [-0.005, 0.005], "z": [-0.003, 0.003]},
+            "pos_randomization_range": {"x": [-0.0, 0.0], "y": [-0.0, 0.0], "z": [-0.0, 0.0]},
         },
     )
 
@@ -201,11 +220,11 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
         self.end_effector_body_name = "link7"  # End effector body name for IK and termination checks
         self.num_arm_joints = 7  # Number of arm joints (excluding gripper)
         self.grasp_rot_offset = [
-            math.sqrt(2) / 2,
-            math.sqrt(2) / 2,
+            -0.707,
+            0.707,
             0.0,
             0.0,
-        ]  # Rotation offset for grasp pose (quaternion [x,y,z,w])
+        ]  # Rotation offset for grasp pose (quaternion [x,y,z,w]) - computed from IK convergence
         self.gripper_joint_setter_func = set_finger_joint_pos_grav  # Gripper-specific joint setter function
 
         # Gear orientation termination thresholds (in degrees)
@@ -248,7 +267,7 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
         # )
 
         # override command generator body
-        self.joint_action_scale = 0.0
+        self.joint_action_scale = 0.01
         self.actions.arm_action = mdp.RelativeJointPositionActionCfg(
             asset_name="robot",
             joint_names=[
@@ -310,6 +329,42 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
             ),
         )
 
+        # Grav gripper actuator configuration override
+        self.scene.robot.actuators["gripper"] = ImplicitActuatorCfg(
+            joint_names_expr=["finger_joint"],  # Only main controllable joint
+            effort_limit_sim=1.0,
+            velocity_limit_sim=1.0,
+            stiffness=2e3,
+            damping=1e1,
+            friction=0.0,
+            armature=0.0,
+        )
+
+        # Override gear initial states for Rizon
+        # Gear base
+        self.scene.factory_gear_base.init_state = RigidObjectCfg.InitialStateCfg(
+            pos=(-0.6, 0.0, -0.1),
+            rot=(0.0, 0.0, 0.70711, 0.70711),
+        )
+
+        # Small gear
+        self.scene.factory_gear_small.init_state = RigidObjectCfg.InitialStateCfg(
+            pos=(-0.6, 0.0, -0.1),
+            rot=(0.0, 0.0, 0.70711, 0.70711),
+        )
+
+        # Medium gear
+        self.scene.factory_gear_medium.init_state = RigidObjectCfg.InitialStateCfg(
+            pos=(-0.6, 0.0, -0.1),
+            rot=(0.0, 0.0, 0.70711, 0.70711),
+        )
+
+        # Large gear
+        self.scene.factory_gear_large.init_state = RigidObjectCfg.InitialStateCfg(
+            pos=(-0.6, 0.0, -0.1),
+            rot=(0.0, 0.0, 0.70711, 0.70711),
+        )
+
         # Note: Rizon4s with Grav gripper doesn't have finger joints in the USD file
         # If the gripper needs to be controlled, the joint names need to match what's in the USD
         # For now, commenting out since finger joints don't exist
@@ -324,23 +379,24 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
         # )
 
         # gear offsets and grasp positions for the Grav gripper
-        # self.gear_offsets_grasp = {
-        #     "gear_small": [0.0, self.gear_offsets["gear_small"][0], -0.0],
-        #     "gear_medium": [0.0, self.gear_offsets["gear_medium"][0], -0.0],
-        #     "gear_large": [0.0, self.gear_offsets["gear_large"][0], -0.0],
-        # }
-
         self.gear_offsets_grasp = {
-            "gear_small": [-self.gear_offsets["gear_small"][0], 0.4, 0.0],
-            "gear_medium": [-self.gear_offsets["gear_medium"][0], 0.4, 0.0],
-            "gear_large": [-self.gear_offsets["gear_large"][0], 0.4, 0.0],
+            "gear_small": [0.0, -self.gear_offsets["gear_small"][0], -0.4],
+            "gear_medium": [0.0, -self.gear_offsets["gear_medium"][0], -0.4],
+            "gear_large": [0.0, -self.gear_offsets["gear_large"][0], -0.35],
         }
 
+        # self.gear_offsets_grasp = {
+        #     "gear_small": [-self.gear_offsets["gear_small"][0], 0.4, 0.0],
+        #     "gear_medium": [-self.gear_offsets["gear_medium"][0], 0.4, 0.0],
+        #     "gear_large": [-self.gear_offsets["gear_large"][0], 0.4, 0.0],
+        # }
+
         # Grasp widths for Grav gripper (these values may need adjustment based on actual gripper)
-        self.hand_grasp_width = {"gear_small": 0.04, "gear_medium": 0.03, "gear_large": 0.025}
+        # 45 degrees in radians
+        self.hand_grasp_width = {"gear_small": 0.15, "gear_medium": 0.2, "gear_large": 0.3}
 
         # Close widths for Grav gripper
-        self.hand_close_width = {"gear_small": 0.045, "gear_medium": 0.035, "gear_large": 0.03}
+        self.hand_close_width = {"gear_small": 0.139626, "gear_medium": 0.139626, "gear_large": 0.139626}
 
         # # Populate event term parameters
         self.events.set_robot_to_grasp_pose.params["gear_offsets_grasp"] = self.gear_offsets_grasp
@@ -349,13 +405,13 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
         self.events.set_robot_to_grasp_pose.params["grasp_rot_offset"] = self.grasp_rot_offset
         self.events.set_robot_to_grasp_pose.params["gripper_joint_setter_func"] = self.gripper_joint_setter_func
 
-        # # Populate termination term parameters
-        # self.terminations.gear_dropped.params["gear_offsets_grasp"] = self.gear_offsets_grasp
-        # self.terminations.gear_dropped.params["end_effector_body_name"] = self.end_effector_body_name
-        # self.terminations.gear_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
+        # Populate termination term parameters
+        self.terminations.gear_dropped.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.terminations.gear_dropped.params["end_effector_body_name"] = self.end_effector_body_name
+        self.terminations.gear_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
 
-        # self.terminations.gear_orientation_exceeded.params["end_effector_body_name"] = self.end_effector_body_name
-        # self.terminations.gear_orientation_exceeded.params["grasp_rot_offset"] = self.grasp_rot_offset
+        self.terminations.gear_orientation_exceeded.params["end_effector_body_name"] = self.end_effector_body_name
+        self.terminations.gear_orientation_exceeded.params["grasp_rot_offset"] = self.grasp_rot_offset
 
 
 @configclass
