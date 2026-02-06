@@ -11,7 +11,9 @@ and deployed on physical robots.
 
 The deploy module includes:
 - Reach environments for end-effector pose tracking
+- Gear assembly environments for manipulation tasks
 
 """
 
+from .gear_assembly.config import rizon_4s, ur_10e  # noqa: F401, F403
 from .reach import *  # noqa: F401, F403

@@ -194,6 +194,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         self.hand_grasp_width = env.cfg.hand_grasp_width
         self.hand_close_width = env.cfg.hand_close_width
 
+
         # Find end effector index once
         eef_indices, _ = self.robot_asset.find_bodies([self.end_effector_body_name])
         if len(eef_indices) == 0:

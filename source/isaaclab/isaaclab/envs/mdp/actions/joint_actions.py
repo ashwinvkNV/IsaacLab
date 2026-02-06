@@ -228,6 +228,9 @@ class RelativeJointPositionAction(JointAction):
     def apply_actions(self):
         # add current joint positions to the processed actions
         current_actions = self.processed_actions + self._asset.data.joint_pos[:, self._joint_ids]
+
+        print(f"self.processed_actions: {self.processed_actions}")
+        print(f"current_actions: {current_actions}")
         # set position targets
         self._asset.set_joint_position_target(current_actions, joint_ids=self._joint_ids)
 
