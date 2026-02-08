@@ -24,7 +24,7 @@ from isaaclab.assets.articulation import ArticulationCfg
 
 RIZON4S_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path="https://github.com/flexivrobotics/isaac_sim_ws/raw/refs/heads/main/exts/isaacsim.robot.manipulators.examples/data/flexiv/Rizon4s.usd",
+        usd_path="https://github.com/flexivrobotics/isaac_sim_ws/raw/refs/heads/main/exts/isaacsim.robot.manipulators.examples/data/flexiv/Rizon4s_with_Grav.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
             max_depenetration_velocity=5.0,
