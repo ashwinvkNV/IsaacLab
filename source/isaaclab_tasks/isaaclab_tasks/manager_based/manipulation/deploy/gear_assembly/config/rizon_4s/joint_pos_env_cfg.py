@@ -137,17 +137,17 @@ class EventCfg:
         },
     )
 
-    # gear_base_physics_material = EventTerm(
-    #     func=mdp.randomize_rigid_body_material,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("factory_gear_base", body_names=".*"),
-    #         "static_friction_range": (0.75, 0.75),
-    #         "dynamic_friction_range": (0.75, 0.75),
-    #         "restitution_range": (0.0, 0.0),
-    #         "num_buckets": 16,
-    #     },
-    # )
+    gear_base_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("factory_gear_base", body_names=".*"),
+            "static_friction_range": (0.0, 0.0),
+            "dynamic_friction_range": (0.0, 0.0),
+            "restitution_range": (0.0, 0.0),
+            "num_buckets": 16,
+        },
+    )
 
     robot_physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
@@ -165,7 +165,7 @@ class EventCfg:
         func=gear_assembly_events.randomize_gear_type,
         mode="reset",
         # params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
-        params={"gear_types": ["gear_large"]},
+        params={"gear_types": ["gear_small"]},
     )
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
@@ -332,7 +332,7 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
         # Grav gripper actuator configuration override
         self.scene.robot.actuators["gripper"] = ImplicitActuatorCfg(
             joint_names_expr=["finger_joint"],  # Only main controllable joint
-            effort_limit_sim=1.0,
+            effort_limit_sim=2.0,
             velocity_limit_sim=1.0,
             stiffness=2e3,
             damping=1e1,
@@ -380,8 +380,8 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
 
         # gear offsets and grasp positions for the Grav gripper
         self.gear_offsets_grasp = {
-            "gear_small": [0.0, -self.gear_offsets["gear_small"][0], -0.4],
-            "gear_medium": [0.0, -self.gear_offsets["gear_medium"][0], -0.4],
+            "gear_small": [0.0, -self.gear_offsets["gear_small"][0], -0.35],
+            "gear_medium": [0.0, -self.gear_offsets["gear_medium"][0], -0.35],
             "gear_large": [0.0, -self.gear_offsets["gear_large"][0], -0.35],
         }
 
@@ -393,10 +393,10 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
 
         # Grasp widths for Grav gripper (these values may need adjustment based on actual gripper)
         # 45 degrees in radians
-        self.hand_grasp_width = {"gear_small": 0.15, "gear_medium": 0.2, "gear_large": 0.3}
+        self.hand_grasp_width = {"gear_small": 0.05, "gear_medium": 0.2, "gear_large": 0.28}
 
         # Close widths for Grav gripper
-        self.hand_close_width = {"gear_small": 0.139626, "gear_medium": 0.139626, "gear_large": 0.139626}
+        self.hand_close_width = {"gear_small": 0.0, "gear_medium": 0.139626, "gear_large": 0.139626}
 
         # # Populate event term parameters
         self.events.set_robot_to_grasp_pose.params["gear_offsets_grasp"] = self.gear_offsets_grasp
