@@ -144,40 +144,17 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         self.num_arm_joints = cfg.params["num_arm_joints"]
         self.gripper_joint_setter_func = cfg.params["gripper_joint_setter_func"]
 
-        # Pre-cache gear grasp offsets as tensors (required parameter)
-        if "gear_offsets_grasp" not in cfg.params:
-            raise ValueError(
-                "'gear_offsets_grasp' parameter is required in set_robot_to_grasp_pose configuration. "
-                "It should be a dict with keys 'gear_small', 'gear_medium', 'gear_large' mapping to [x, y, z] offsets."
-            )
-        gear_offsets_grasp = cfg.params["gear_offsets_grasp"]
-        if not isinstance(gear_offsets_grasp, dict):
-            raise TypeError(
-                f"'gear_offsets_grasp' parameter must be a dict, got {type(gear_offsets_grasp).__name__}. "
-                "It should have keys 'gear_small', 'gear_medium', 'gear_large' mapping to [x, y, z] offsets."
-            )
+        # Get grasp offset (for cable insertion, single object)
+        # For backward compatibility, check both 'gear_offsets_grasp' and 'grasp_offset'
+        grasp_offset = cfg.params.get("grasp_offset", [0.0, 0.0, 0.0])
 
-        self.gear_grasp_offset_tensors = {}
-        for gear_type in ["gear_small", "gear_medium", "gear_large"]:
-            if gear_type not in gear_offsets_grasp:
-                raise ValueError(
-                    f"'{gear_type}' offset is required in 'gear_offsets_grasp' parameter. "
-                    f"Found keys: {list(gear_offsets_grasp.keys())}"
-                )
-            self.gear_grasp_offset_tensors[gear_type] = torch.tensor(
-                gear_offsets_grasp[gear_type], device=env.device, dtype=torch.float32
-            )
-
-        # Stack grasp offset tensors for vectorized indexing (shape: 3, 3)
-        # Index 0=small, 1=medium, 2=large
-        self.gear_grasp_offsets_stacked = torch.stack(
-            [
-                self.gear_grasp_offset_tensors["gear_small"],
-                self.gear_grasp_offset_tensors["gear_medium"],
-                self.gear_grasp_offset_tensors["gear_large"],
-            ],
-            dim=0,
+        # Convert to tensor
+        self.grasp_offset_tensor = torch.tensor(
+            grasp_offset, device=env.device, dtype=torch.float32
         )
+
+        # Get target object name (default to 'gb300_plug' for cable insertion)
+        self.target_object_name = cfg.params.get("target_object_name", "gb300_plug")
 
         # Pre-cache grasp rotation offset tensor
         grasp_rot_offset = cfg.params["grasp_rot_offset"]
@@ -186,9 +163,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         )
 
         # Pre-allocate buffers for batch operations
-        self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
-        self.local_env_indices = torch.arange(env.num_envs, device=env.device)
-        self.gear_grasp_offsets_buffer = torch.zeros(env.num_envs, 3, device=env.device, dtype=torch.float32)
+        self.grasp_offsets_buffer = torch.zeros(env.num_envs, 3, device=env.device, dtype=torch.float32)
 
         # Cache hand grasp/close widths
         self.hand_grasp_width = env.cfg.hand_grasp_width
@@ -229,7 +204,8 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         rot_threshold: float = 1e-6,
         max_iterations: int = 50,
         pos_randomization_range: dict | None = None,
-        gear_offsets_grasp: dict | None = None,
+        target_object_name: str | None = None,
+        grasp_offset: list | None = None,
         end_effector_body_name: str | None = None,
         num_arm_joints: int | None = None,
         grasp_rot_offset: list | None = None,
@@ -246,20 +222,9 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             max_iterations: Maximum IK iterations
             pos_randomization_range: Optional position randomization range
         """
-        # Check if gear type manager exists
-        if not hasattr(env, "_gear_type_manager"):
-            raise RuntimeError(
-                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
-                "in your environment's event configuration before this event term is used."
-            )
-
-        gear_type_manager: randomize_gear_type = env._gear_type_manager
-
         # Slice buffers for current batch size
         num_reset_envs = len(env_ids)
-        gear_type_indices = self.gear_type_indices[:num_reset_envs]
-        local_env_indices = self.local_env_indices[:num_reset_envs]
-        gear_grasp_offsets = self.gear_grasp_offsets_buffer[:num_reset_envs]
+        grasp_offsets = self.grasp_offsets_buffer[:num_reset_envs]
         grasp_rot_offset_tensor = self.grasp_rot_offset_tensor[env_ids]
 
         # IK loop
@@ -268,38 +233,16 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             joint_pos = self.robot_asset.data.joint_pos[env_ids].clone()
             joint_vel = self.robot_asset.data.joint_vel[env_ids].clone()
 
-            # Stack all gear positions and quaternions
-            all_gear_pos = torch.stack(
-                [
-                    env.scene["factory_gear_small"].data.root_link_pos_w,
-                    env.scene["factory_gear_medium"].data.root_link_pos_w,
-                    env.scene["factory_gear_large"].data.root_link_pos_w,
-                ],
-                dim=1,
-            )[env_ids]
-
-            all_gear_quat = torch.stack(
-                [
-                    env.scene["factory_gear_small"].data.root_link_quat_w,
-                    env.scene["factory_gear_medium"].data.root_link_quat_w,
-                    env.scene["factory_gear_large"].data.root_link_quat_w,
-                ],
-                dim=1,
-            )[env_ids]
-
-            # Get gear type indices directly as tensor
-            all_gear_type_indices = gear_type_manager.get_all_gear_type_indices()
-            gear_type_indices[:] = all_gear_type_indices[env_ids]
-
-            # Select gear data using advanced indexing
-            grasp_object_pos_world = all_gear_pos[local_env_indices, gear_type_indices]
-            grasp_object_quat = all_gear_quat[local_env_indices, gear_type_indices]
+            # Get target object position and orientation
+            target_object = env.scene[self.target_object_name]
+            grasp_object_pos_world = target_object.data.root_link_pos_w[env_ids]
+            grasp_object_quat = target_object.data.root_link_quat_w[env_ids]
 
             # Apply rotation offset
             grasp_object_quat = math_utils.quat_mul(grasp_object_quat, grasp_rot_offset_tensor)
 
-            # Get grasp offsets (vectorized)
-            gear_grasp_offsets[:] = self.gear_grasp_offsets_stacked[gear_type_indices]
+            # Get grasp offsets
+            grasp_offsets[:] = self.grasp_offset_tensor
 
             # Add position randomization if specified
             if pos_randomization_range is not None:
@@ -309,11 +252,11 @@ class set_robot_to_grasp_pose(ManagerTermBase):
                 rand_pos_offsets = math_utils.sample_uniform(
                     ranges_pos[:, 0], ranges_pos[:, 1], (len(env_ids), 3), device=env.device
                 )
-                gear_grasp_offsets = gear_grasp_offsets + rand_pos_offsets
+                grasp_offsets = grasp_offsets + rand_pos_offsets
 
-            # Transform offsets from gear frame to world frame
+            # Transform offsets from object frame to world frame
             grasp_object_pos_world = grasp_object_pos_world + math_utils.quat_apply(
-                grasp_object_quat, gear_grasp_offsets
+                grasp_object_quat, grasp_offsets
             )
 
             # Get end effector pose
@@ -381,9 +324,12 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             self.robot_asset.set_joint_position_target(joint_pos, env_ids=env_ids)
             self.robot_asset.set_joint_velocity_target(joint_vel, env_ids=env_ids)
             self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        #     for _ in range(2):
+        #         env.sim.render()
+        #         input("Press Enter to continue outside loop...")
 
 
-        # for _ in range(5):
+        # for _ in range(2):
         #     env.sim.render()
         #     input("Press Enter to continue outside loop...")
 
@@ -393,27 +339,22 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         # Set gripper to grasp position
         joint_pos = self.robot_asset.data.joint_pos[env_ids].clone()
 
-        # Get gear types for all environments
-        all_gear_types = gear_type_manager.get_all_gear_types()
-        for row_idx, env_id in enumerate(env_ids.tolist()):
-            gear_key = all_gear_types[env_id]
-            hand_grasp_width = self.hand_grasp_width[gear_key]
-            self.gripper_joint_setter_func(joint_pos, [row_idx], self.finger_joints, hand_grasp_width)
+        # Set gripper width to grasp position
+        for row_idx in range(len(env_ids)):
+            self.gripper_joint_setter_func(joint_pos, [row_idx], self.finger_joints, self.hand_grasp_width)
 
         self.robot_asset.set_joint_position_target(joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
         self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
-        # for _ in range(5):
-        #     env.sim.render()
-        #     input("Press Enter to continue outside loop after setting gripper to grasp position...")
-
         # Set gripper to closed position
-        for row_idx, env_id in enumerate(env_ids.tolist()):
-            gear_key = all_gear_types[env_id]
-            hand_close_width = self.hand_close_width[gear_key]
-            self.gripper_joint_setter_func(joint_pos, [row_idx], self.finger_joints, hand_close_width)
+        for row_idx in range(len(env_ids)):
+            self.gripper_joint_setter_func(joint_pos, [row_idx], self.finger_joints, self.hand_close_width)
 
         self.robot_asset.set_joint_position_target(joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
+
+        for _ in range(5):
+            env.sim.render()
+            input("Press Enter to continue outside loop...")
 
 
 class randomize_gears_and_base_pose(ManagerTermBase):

@@ -174,9 +174,9 @@ class keypoint_command_error_exp(ManagerTermBase):
 
 
 class keypoint_entity_error(ManagerTermBase):
-    """Compute keypoint distance between a RigidObject and the dynamically selected gear.
+    """Compute keypoint distance between two RigidObjects (e.g., plug and socket).
 
-    This class-based term pre-caches gear type mapping and asset references.
+    This class-based term computes distance between two specified assets.
     """
 
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
@@ -188,21 +188,12 @@ class keypoint_entity_error(ManagerTermBase):
         """
         super().__init__(cfg, env)
 
-        # Cache asset configuration
-        self.asset_cfg_1: SceneEntityCfg = cfg.params.get("asset_cfg_1", SceneEntityCfg("factory_gear_base"))
+        # Cache asset configurations
+        self.asset_cfg_1: SceneEntityCfg = cfg.params.get("asset_cfg_1", SceneEntityCfg("gb300_socket"))
+        self.asset_cfg_2: SceneEntityCfg = cfg.params.get("asset_cfg_2", SceneEntityCfg("gb300_plug"))
+
         self.asset_1 = env.scene[self.asset_cfg_1.name]
-
-        # Pre-allocate gear type mapping and indices
-        self.gear_type_map = {"gear_small": 0, "gear_medium": 1, "gear_large": 2}
-        self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
-        self.env_indices = torch.arange(env.num_envs, device=env.device)
-
-        # Cache gear assets
-        self.gear_assets = {
-            "gear_small": env.scene["factory_gear_small"],
-            "gear_medium": env.scene["factory_gear_medium"],
-            "gear_large": env.scene["factory_gear_large"],
-        }
+        self.asset_2 = env.scene[self.asset_cfg_2.name]
 
         # Create keypoint distance computer
         self.keypoint_computer = _compute_keypoint_distance(cfg, env)
@@ -211,6 +202,7 @@ class keypoint_entity_error(ManagerTermBase):
         self,
         env: ManagerBasedRLEnv,
         asset_cfg_1: SceneEntityCfg,
+        asset_cfg_2: SceneEntityCfg,
         keypoint_scale: float = 1.0,
         add_cube_center_kp: bool = True,
     ) -> torch.Tensor:
@@ -218,50 +210,21 @@ class keypoint_entity_error(ManagerTermBase):
 
         Args:
             env: Environment instance
-            asset_cfg_1: Configuration of the first asset (RigidObject)
+            asset_cfg_1: Configuration of the first asset (e.g., socket)
+            asset_cfg_2: Configuration of the second asset (e.g., plug)
             keypoint_scale: Scale factor for keypoint offsets
             add_cube_center_kp: Whether to include center keypoint
 
         Returns:
             Mean keypoint distance tensor of shape (num_envs,)
         """
-        # Get current pose of asset_1 (RigidObject)
+        # Get current pose of asset_1 (e.g., socket)
         curr_pos_1 = self.asset_1.data.body_pos_w[:, 0]
         curr_quat_1 = self.asset_1.data.body_quat_w[:, 0]
 
-        # Check if gear type manager exists
-        if not hasattr(env, "_gear_type_manager"):
-            raise RuntimeError(
-                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
-                "in your environment's event configuration before this reward term is used."
-            )
-
-        gear_type_manager: randomize_gear_type = env._gear_type_manager
-        # Get gear type indices directly as tensor
-        self.gear_type_indices = gear_type_manager.get_all_gear_type_indices()
-
-        # Stack all gear positions and quaternions
-        all_gear_pos = torch.stack(
-            [
-                self.gear_assets["gear_small"].data.body_pos_w[:, 0],
-                self.gear_assets["gear_medium"].data.body_pos_w[:, 0],
-                self.gear_assets["gear_large"].data.body_pos_w[:, 0],
-            ],
-            dim=1,
-        )
-
-        all_gear_quat = torch.stack(
-            [
-                self.gear_assets["gear_small"].data.body_quat_w[:, 0],
-                self.gear_assets["gear_medium"].data.body_quat_w[:, 0],
-                self.gear_assets["gear_large"].data.body_quat_w[:, 0],
-            ],
-            dim=1,
-        )
-
-        # Select positions and quaternions using advanced indexing
-        curr_pos_2 = all_gear_pos[self.env_indices, self.gear_type_indices]
-        curr_quat_2 = all_gear_quat[self.env_indices, self.gear_type_indices]
+        # Get current pose of asset_2 (e.g., plug)
+        curr_pos_2 = self.asset_2.data.body_pos_w[:, 0]
+        curr_quat_2 = self.asset_2.data.body_quat_w[:, 0]
 
         # Compute keypoint distance
         keypoint_dist_sep = self.keypoint_computer.compute(
@@ -276,9 +239,9 @@ class keypoint_entity_error(ManagerTermBase):
 
 
 class keypoint_entity_error_exp(ManagerTermBase):
-    """Compute exponential keypoint reward between a RigidObject and the dynamically selected gear.
+    """Compute exponential keypoint reward between two RigidObjects (e.g., plug and socket).
 
-    This class-based term pre-caches gear type mapping and asset references.
+    This class-based term computes exponential reward between two specified assets.
     """
 
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
@@ -290,21 +253,12 @@ class keypoint_entity_error_exp(ManagerTermBase):
         """
         super().__init__(cfg, env)
 
-        # Cache asset configuration
-        self.asset_cfg_1: SceneEntityCfg = cfg.params.get("asset_cfg_1", SceneEntityCfg("factory_gear_base"))
+        # Cache asset configurations
+        self.asset_cfg_1: SceneEntityCfg = cfg.params.get("asset_cfg_1", SceneEntityCfg("gb300_socket"))
+        self.asset_cfg_2: SceneEntityCfg = cfg.params.get("asset_cfg_2", SceneEntityCfg("gb300_plug"))
+
         self.asset_1 = env.scene[self.asset_cfg_1.name]
-
-        # Pre-allocate gear type mapping and indices
-        self.gear_type_map = {"gear_small": 0, "gear_medium": 1, "gear_large": 2}
-        self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
-        self.env_indices = torch.arange(env.num_envs, device=env.device)
-
-        # Cache gear assets
-        self.gear_assets = {
-            "gear_small": env.scene["factory_gear_small"],
-            "gear_medium": env.scene["factory_gear_medium"],
-            "gear_large": env.scene["factory_gear_large"],
-        }
+        self.asset_2 = env.scene[self.asset_cfg_2.name]
 
         # Create keypoint distance computer
         self.keypoint_computer = _compute_keypoint_distance(cfg, env)
@@ -313,6 +267,7 @@ class keypoint_entity_error_exp(ManagerTermBase):
         self,
         env: ManagerBasedRLEnv,
         asset_cfg_1: SceneEntityCfg,
+        asset_cfg_2: SceneEntityCfg,
         kp_exp_coeffs: list[tuple[float, float]] = [(1.0, 0.1)],
         kp_use_sum_of_exps: bool = True,
         keypoint_scale: float = 1.0,
@@ -322,7 +277,8 @@ class keypoint_entity_error_exp(ManagerTermBase):
 
         Args:
             env: Environment instance
-            asset_cfg_1: Configuration of the first asset (RigidObject)
+            asset_cfg_1: Configuration of the first asset (e.g., socket)
+            asset_cfg_2: Configuration of the second asset (e.g., plug)
             kp_exp_coeffs: List of (a, b) coefficient pairs for exponential reward
             kp_use_sum_of_exps: Whether to use sum of exponentials
             keypoint_scale: Scale factor for keypoint offsets
@@ -331,43 +287,13 @@ class keypoint_entity_error_exp(ManagerTermBase):
         Returns:
             Exponential keypoint reward tensor of shape (num_envs,)
         """
-        # Get current pose of asset_1 (RigidObject)
+        # Get current pose of asset_1 (e.g., socket)
         curr_pos_1 = self.asset_1.data.body_pos_w[:, 0]
         curr_quat_1 = self.asset_1.data.body_quat_w[:, 0]
 
-        # Check if gear type manager exists
-        if not hasattr(env, "_gear_type_manager"):
-            raise RuntimeError(
-                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
-                "in your environment's event configuration before this reward term is used."
-            )
-
-        gear_type_manager: randomize_gear_type = env._gear_type_manager
-        # Get gear type indices directly as tensor
-        self.gear_type_indices = gear_type_manager.get_all_gear_type_indices()
-
-        # Stack all gear positions and quaternions
-        all_gear_pos = torch.stack(
-            [
-                self.gear_assets["gear_small"].data.body_pos_w[:, 0],
-                self.gear_assets["gear_medium"].data.body_pos_w[:, 0],
-                self.gear_assets["gear_large"].data.body_pos_w[:, 0],
-            ],
-            dim=1,
-        )
-
-        all_gear_quat = torch.stack(
-            [
-                self.gear_assets["gear_small"].data.body_quat_w[:, 0],
-                self.gear_assets["gear_medium"].data.body_quat_w[:, 0],
-                self.gear_assets["gear_large"].data.body_quat_w[:, 0],
-            ],
-            dim=1,
-        )
-
-        # Select positions and quaternions using advanced indexing
-        curr_pos_2 = all_gear_pos[self.env_indices, self.gear_type_indices]
-        curr_quat_2 = all_gear_quat[self.env_indices, self.gear_type_indices]
+        # Get current pose of asset_2 (e.g., plug)
+        curr_pos_2 = self.asset_2.data.body_pos_w[:, 0]
+        curr_quat_2 = self.asset_2.data.body_quat_w[:, 0]
 
         # Compute keypoint distance
         keypoint_dist_sep = self.keypoint_computer.compute(
