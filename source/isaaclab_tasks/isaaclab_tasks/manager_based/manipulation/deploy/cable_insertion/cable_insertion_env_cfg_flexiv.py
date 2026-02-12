@@ -39,7 +39,7 @@ class GB300Plug(RigidObjectCfg):
 
     prim_path = "{ENV_REGEX_NS}/GB300Plug"
     spawn = sim_utils.UsdFileCfg(
-        usd_path="omniverse://ov-isaac-dev/Projects/fii_assembly/insertion_assets/plug_A_no_snapfit_latch_transformed.usd",
+        usd_path="omniverse://isaac-dev.ov.nvidia.com/Projects/fii_assembly/insertion_assets/plug_A_no_snapfit_latch_transformed.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -67,7 +67,7 @@ class GB300Socket(RigidObjectCfg):
 
     prim_path = "{ENV_REGEX_NS}/GB300Socket"
     spawn = sim_utils.UsdFileCfg(
-        usd_path="omniverse://ov-isaac-dev/Projects/fii_assembly/insertion_assets/socket_A_simplified_minimal_transformed.usd",
+        usd_path="omniverse://isaac-dev.ov.nvidia.com/Projects/fii_assembly/insertion_assets/socket_A_simplified_minimal_transformed.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
