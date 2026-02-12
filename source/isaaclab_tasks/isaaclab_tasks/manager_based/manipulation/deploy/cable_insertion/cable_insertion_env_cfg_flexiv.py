@@ -257,7 +257,7 @@ class CableInsertionEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.episode_length_s = 1.0
+        self.episode_length_s = 6.66
         self.viewer.eye = (3.5, 3.5, 3.5)
         # simulation settings
         self.decimation = 4
