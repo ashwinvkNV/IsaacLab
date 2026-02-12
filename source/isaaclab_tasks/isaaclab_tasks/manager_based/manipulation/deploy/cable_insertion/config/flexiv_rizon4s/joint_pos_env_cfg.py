@@ -12,6 +12,7 @@ from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg, RigidObjectCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.utils import configclass
 
 import isaaclab_tasks.manager_based.manipulation.deploy.mdp as mdp
@@ -96,8 +97,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("gb300_socket", body_names=".*"),
-            "static_friction_range": (0.0, 0.0),
-            "dynamic_friction_range": (0.0, 0.0),
+            "static_friction_range": (0.75, 0.75),
+            "dynamic_friction_range": (0.75, 0.75),
             "restitution_range": (0.0, 0.0),
             "num_buckets": 16,
         },
@@ -117,22 +118,28 @@ class EventCfg:
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    # randomize_plug_and_socket_pose = EventTerm(
-    #     func=mdp.reset_root_state_uniform,
-    #     mode="reset",
-    #     params={
-    #         "pose_range": {
-    #             "x": [-0.05, 0.05],
-    #             "y": [-0.05, 0.05],
-    #             "z": [0.1, 0.15],
-    #             "roll": [-math.pi / 90, math.pi / 90],  # 2 degrees
-    #             "pitch": [-math.pi / 90, math.pi / 90],  # 2 degrees
-    #             "yaw": [-math.pi / 6, math.pi / 6],  # 30 degrees
-    #         },
-    #         "velocity_range": {},
-    #         "asset_cfg": SceneEntityCfg("gb300_plug"),
-    #     },
-    # )
+    randomize_plug_and_socket_pose = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {
+                # "x": [-0.05, 0.05],
+                # "y": [-0.05, 0.05],
+                # "z": [0.1, 0.15],
+                # "roll": [-math.pi / 90, math.pi / 90],  # 2 degrees
+                # "pitch": [-math.pi / 90, math.pi / 90],  # 2 degrees
+                # "yaw": [-math.pi / 6, math.pi / 6],  # 30 degrees
+                "x": [0.0, 0.0],
+                "y": [0.0, 0.0],
+                "z": [-0.1, -0.05],
+                "roll": [0.0, 0.0],
+                "pitch": [0.0, 0.0],
+                "yaw": [0.0, 0.0],
+            },
+            "velocity_range": {},
+            "asset_cfg": SceneEntityCfg("gb300_socket"),
+        },
+    )
 
     set_robot_to_grasp_pose = EventTerm(
         func=mdp.set_robot_to_grasp_pose,
@@ -141,6 +148,39 @@ class EventCfg:
             "robot_asset_cfg": SceneEntityCfg("robot"),
             "pos_randomization_range": {"x": [0.0, 0.0], "y": [0.0, 0.0], "z": [0.0, 0.0]},
             "target_object_name": "gb300_plug",
+            "grasp_offset": [0.0, 0.0, 0.0],  # Will be updated in __post_init__
+        },
+    )
+
+
+@configclass
+class TerminationsCfg:
+    """Configuration for termination terms."""
+
+    time_out = DoneTerm(func=mdp.time_out, time_out=True)
+
+    plug_dropped = DoneTerm(
+        func=mdp.reset_when_plug_dropped,
+        params={
+            "robot_asset_cfg": SceneEntityCfg("robot"),
+            "plug_asset_cfg": SceneEntityCfg("gb300_plug"),
+            "distance_threshold": 0.1,  # Terminate if end effector is more than 10cm from expected grasp position
+            "end_effector_body_name": "link7",  # Will be populated from config
+            "grasp_offset": [-0.531, -0.025, -0.383],  # Will be populated from config
+            "grasp_rot_offset": [-0.70711, 0.70711, 0.0, 0.0],  # Will be populated from config
+        },
+    )
+
+    plug_orientation_error = DoneTerm(
+        func=mdp.reset_when_plug_orientation_exceeds_threshold,
+        params={
+            "robot_asset_cfg": SceneEntityCfg("robot"),
+            "plug_asset_cfg": SceneEntityCfg("gb300_plug"),
+            "roll_threshold_deg": 30.0,  # Terminate if roll error exceeds 30 degrees
+            "pitch_threshold_deg": 30.0,  # Terminate if pitch error exceeds 30 degrees
+            "yaw_threshold_deg": 180.0,  # Terminate if yaw error exceeds 180 degrees
+            "end_effector_body_name": "link7",  # Will be populated from config
+            "grasp_rot_offset": [-0.70711, 0.70711, 0.0, 0.0],  # Will be populated from config
         },
     )
 
@@ -159,12 +199,13 @@ class Rizon4sCableInsertionEnvCfg(CableInsertionEnvCfg):
         # Robot-specific parameters
         self.end_effector_body_name = "link7"  # End effector body name for IK
         self.num_arm_joints = 7  # Number of arm joints (excluding gripper)
-        self.grasp_offset = [0.03, 0.0023, -0.328]
+        # self.grasp_offset = [0.03, 0.0023, -0.328]
+        self.grasp_offset = [-0.531, -0.025, -0.39]
         self.grasp_rot_offset = [
+            -0.70711,
+            0.70711,
             0.0,
             0.0,
-            0.0,
-            1.0,
         ]  # Rotation offset for grasp pose (quaternion [x,y,z,w])
         self.gripper_joint_setter_func = set_finger_joint_pos_grav  # Gripper-specific joint setter function
 
@@ -202,6 +243,17 @@ class Rizon4sCableInsertionEnvCfg(CableInsertionEnvCfg):
 
         # override events
         self.events = EventCfg()
+
+        # override terminations
+        self.terminations = TerminationsCfg()
+
+        # Populate termination term parameters
+        self.terminations.plug_dropped.params["end_effector_body_name"] = self.end_effector_body_name
+        self.terminations.plug_dropped.params["grasp_offset"] = self.grasp_offset
+        self.terminations.plug_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
+
+        self.terminations.plug_orientation_error.params["end_effector_body_name"] = self.end_effector_body_name
+        self.terminations.plug_orientation_error.params["grasp_rot_offset"] = self.grasp_rot_offset
 
         # override command generator body
         self.joint_action_scale = 0.01
@@ -269,7 +321,7 @@ class Rizon4sGravCableInsertionEnvCfg(Rizon4sCableInsertionEnvCfg):
         # Grav gripper actuator configuration override
         self.scene.robot.actuators["gripper"] = ImplicitActuatorCfg(
             joint_names_expr=["finger_joint"],  # Only main controllable joint
-            effort_limit_sim=2.0,
+            effort_limit_sim=1.0,
             velocity_limit_sim=1.0,
             stiffness=2e3,
             damping=1e1,
@@ -291,7 +343,7 @@ class Rizon4sGravCableInsertionEnvCfg(Rizon4sCableInsertionEnvCfg):
         # )
 
         # Grasp width for Grav gripper (may need adjustment)
-        self.hand_grasp_width = -0.1  # Open width for grasping plug
+        self.hand_grasp_width = -0.065  # Open width for grasping plug
         self.hand_close_width = -0.15  # Closed width
 
         # Populate event term parameters

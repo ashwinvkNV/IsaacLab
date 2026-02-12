@@ -324,9 +324,9 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             self.robot_asset.set_joint_position_target(joint_pos, env_ids=env_ids)
             self.robot_asset.set_joint_velocity_target(joint_vel, env_ids=env_ids)
             self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
-        #     for _ in range(2):
-        #         env.sim.render()
-        #         input("Press Enter to continue outside loop...")
+            # for _ in range(2):
+            #     env.sim.render()
+            #     input("Press Enter to continue outside loop...")
 
 
         # for _ in range(2):
@@ -352,9 +352,9 @@ class set_robot_to_grasp_pose(ManagerTermBase):
 
         self.robot_asset.set_joint_position_target(joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
 
-        for _ in range(5):
-            env.sim.render()
-            input("Press Enter to continue outside loop...")
+        # for _ in range(5):
+        #     env.sim.render()
+        #     input("Press Enter to continue outside loop...")
 
 
 class randomize_gears_and_base_pose(ManagerTermBase):

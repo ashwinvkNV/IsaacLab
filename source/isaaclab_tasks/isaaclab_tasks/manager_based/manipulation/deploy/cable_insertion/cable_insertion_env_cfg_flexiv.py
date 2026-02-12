@@ -39,7 +39,7 @@ class GB300Plug(RigidObjectCfg):
 
     prim_path = "{ENV_REGEX_NS}/GB300Plug"
     spawn = sim_utils.UsdFileCfg(
-        usd_path="omniverse://ov-isaac-dev/Projects/fii_assembly/insertion_assets/plug_A_no_snapfit_latch.usd",
+        usd_path="omniverse://ov-isaac-dev/Projects/fii_assembly/insertion_assets/plug_A_no_snapfit_latch_transformed.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -50,14 +50,15 @@ class GB300Plug(RigidObjectCfg):
             max_linear_velocity=1000.0,
             max_angular_velocity=3666.0,
             enable_gyroscopic_forces=True,
-            solver_position_iteration_count=32,
+            solver_position_iteration_count=128,
             solver_velocity_iteration_count=1,
             max_contact_impulse=1e32,
         ),
         mass_props=sim_utils.MassPropertiesCfg(mass=0.019),
         collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.02, rest_offset=0.0),
     )
-    init_state = RigidObjectCfg.InitialStateCfg(pos=(-0.6, 0.0, 0.0), rot=(1.0, 0.0, 0.0, 0.0))
+    # Inserted pose: same position and orientation as socket so *_transformed assets align
+    init_state = RigidObjectCfg.InitialStateCfg(pos=(-0.6, -0.4, 0.1), rot=(0.0, 0.0, 0.0, 1.0))
 
 
 @configclass
@@ -66,7 +67,7 @@ class GB300Socket(RigidObjectCfg):
 
     prim_path = "{ENV_REGEX_NS}/GB300Socket"
     spawn = sim_utils.UsdFileCfg(
-        usd_path="omniverse://ov-isaac-dev/Projects/fii_assembly/insertion_assets/socket_A_simplified_minimal.usd",
+        usd_path="omniverse://ov-isaac-dev/Projects/fii_assembly/insertion_assets/socket_A_simplified_minimal_transformed.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -77,14 +78,14 @@ class GB300Socket(RigidObjectCfg):
             max_linear_velocity=1000.0,
             max_angular_velocity=3666.0,
             enable_gyroscopic_forces=True,
-            solver_position_iteration_count=32,
+            solver_position_iteration_count=128,
             solver_velocity_iteration_count=1,
             max_contact_impulse=1e32,
         ),
         mass_props=sim_utils.MassPropertiesCfg(mass=None),
         collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.02, rest_offset=0.0),
     )
-    init_state = RigidObjectCfg.InitialStateCfg(pos=(-0.6, 0.0, 0.1), rot=(0.0, 0.0, 0.0, 1.0))
+    init_state = RigidObjectCfg.InitialStateCfg(pos=(-0.6, -0.4, 0.1), rot=(0.0, 0.0, 0.0, 1.0))
 
 
 ##
@@ -140,14 +141,15 @@ class ObservationsCfg:
         joint_pos = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
         joint_vel = ObsTerm(func=mdp.joint_vel, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
 
-        # Socket observations (target)
-        socket_pos = ObsTerm(
-            func=mdp.gear_shaft_pos_w,
-            params={"asset_cfg": SceneEntityCfg("gb300_socket"), "offset": [0.0, 0.0, 0.0]},
-            noise=ResetSampledConstantNoiseModelCfg(
-                noise_cfg=UniformNoiseCfg(n_min=-0.005, n_max=0.005, operation="add")
-            ),
-        )
+        # # Socket observations (target)
+        # socket_pos = ObsTerm(
+        #     func=mdp.gear_shaft_pos_w,
+        #     params={"asset_cfg": SceneEntityCfg("gb300_socket"), "offset": [0.0, 0.0, 0.0]},
+        #     noise=ResetSampledConstantNoiseModelCfg(
+        #         noise_cfg=UniformNoiseCfg(n_min=-0.005, n_max=0.005, operation="add")
+        #     ),
+        # )
+        socket_pos = ObsTerm(func=mdp.gear_shaft_pos_w, params={"asset_cfg": SceneEntityCfg("gb300_socket"), "offset": [0.0, 0.0, 0.0]})
         socket_quat = ObsTerm(func=mdp.gear_shaft_quat_w, params={"asset_cfg": SceneEntityCfg("gb300_socket")})
 
         def __post_init__(self):
@@ -181,19 +183,19 @@ class EventCfg:
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    reset_plug = EventTerm(
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
-        params={
-            "pose_range": {
-                "x": [-0.05, 0.05],
-                "y": [-0.05, 0.05],
-                "z": [0.1, 0.15],
-            },
-            "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("gb300_plug"),
-        },
-    )
+    # reset_plug = EventTerm(
+    #     func=mdp.reset_root_state_uniform,
+    #     mode="reset",
+    #     params={
+    #         "pose_range": {
+    #             "x": [-0.05, 0.05],
+    #             "y": [-0.05, 0.05],
+    #             "z": [0.1, 0.15],
+    #         },
+    #         "velocity_range": {},
+    #         "asset_cfg": SceneEntityCfg("gb300_plug"),
+    #     },
+    # )
 
 
 @configclass

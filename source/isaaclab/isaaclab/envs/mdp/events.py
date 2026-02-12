@@ -1137,6 +1137,10 @@ def reset_root_state_uniform(
     asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
     asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
 
+    # for _ in range(5):
+    #     env.sim.render()
+    #     input("Press Enter to continue outside loop...")
+
 
 def reset_root_state_with_random_orientation(
     env: ManagerBasedEnv,
