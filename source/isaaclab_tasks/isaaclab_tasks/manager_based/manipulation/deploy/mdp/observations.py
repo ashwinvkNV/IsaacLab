@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import torch
+import warp as wp
 
 from isaaclab.assets import RigidObject
 from isaaclab.managers import ManagerTermBase, ObservationTermCfg, SceneEntityCfg
@@ -117,8 +118,9 @@ class gear_shaft_pos_w(ManagerTermBase):
             Gear shaft position tensor of shape (num_envs, 3)
         """
         # Check if gear type manager exists
-        # During initialization, return zeros since the manager hasn't been created yet
+        # During initialization (shape checking), the manager may not exist yet
         if not hasattr(env, "_gear_type_manager"):
+            # Return default shape during initialization
             return torch.zeros(env.num_envs, 3, device=env.device)
 
         gear_type_manager: randomize_gear_type = env._gear_type_manager
@@ -126,8 +128,8 @@ class gear_shaft_pos_w(ManagerTermBase):
         gear_type_indices = gear_type_manager.get_all_gear_type_indices()
 
         # Get base gear position and orientation
-        base_pos = self.asset.data.root_pos_w
-        base_quat = self.asset.data.root_quat_w
+        base_pos = wp.to_torch(self.asset.data.root_pos_w)
+        base_quat = wp.to_torch(self.asset.data.root_quat_w)
 
         # Update offsets using vectorized indexing
         self.offsets_buffer = self.gear_offsets_stacked[gear_type_indices]
@@ -180,7 +182,7 @@ class gear_shaft_quat_w(ManagerTermBase):
             Gear shaft orientation tensor of shape (num_envs, 4)
         """
         # Get base quaternion
-        base_quat = self.asset.data.root_quat_w
+        base_quat = wp.to_torch(self.asset.data.root_quat_w)
 
         # Ensure w component is positive (q and -q represent the same rotation)
         # Pick one canonical form to reduce observation variation seen by the policy
@@ -236,8 +238,9 @@ class gear_pos_w(ManagerTermBase):
             Gear position tensor of shape (num_envs, 3)
         """
         # Check if gear type manager exists
-        # During initialization, return zeros since the manager hasn't been created yet
+        # During initialization (shape checking), the manager may not exist yet
         if not hasattr(env, "_gear_type_manager"):
+            # Return default shape during initialization
             return torch.zeros(env.num_envs, 3, device=env.device)
 
         gear_type_manager: randomize_gear_type = env._gear_type_manager
@@ -247,9 +250,9 @@ class gear_pos_w(ManagerTermBase):
         # Stack all gear positions
         all_gear_positions = torch.stack(
             [
-                self.gear_assets["gear_small"].data.root_pos_w,
-                self.gear_assets["gear_medium"].data.root_pos_w,
-                self.gear_assets["gear_large"].data.root_pos_w,
+                wp.to_torch(self.gear_assets["gear_small"].data.root_pos_w),
+                wp.to_torch(self.gear_assets["gear_medium"].data.root_pos_w),
+                wp.to_torch(self.gear_assets["gear_large"].data.root_pos_w),
             ],
             dim=1,
         )
@@ -306,9 +309,12 @@ class gear_quat_w(ManagerTermBase):
             Gear orientation tensor of shape (num_envs, 4)
         """
         # Check if gear type manager exists
-        # During initialization, return zeros since the manager hasn't been created yet
+        # During initialization (shape checking), the manager may not exist yet
         if not hasattr(env, "_gear_type_manager"):
-            return torch.zeros(env.num_envs, 3, device=env.device)
+            # Return default shape during initialization (identity quaternion)
+            default_quat = torch.zeros(env.num_envs, 4, device=env.device)
+            default_quat[:, 3] = 1.0
+            return default_quat
 
         gear_type_manager: randomize_gear_type = env._gear_type_manager
         # Get gear type indices directly as tensor (no Python loops!)
@@ -317,9 +323,9 @@ class gear_quat_w(ManagerTermBase):
         # Stack all gear quaternions
         all_gear_quat = torch.stack(
             [
-                self.gear_assets["gear_small"].data.root_quat_w,
-                self.gear_assets["gear_medium"].data.root_quat_w,
-                self.gear_assets["gear_large"].data.root_quat_w,
+                wp.to_torch(self.gear_assets["gear_small"].data.root_quat_w),
+                wp.to_torch(self.gear_assets["gear_medium"].data.root_quat_w),
+                wp.to_torch(self.gear_assets["gear_large"].data.root_quat_w),
             ],
             dim=1,
         )

@@ -3,9 +3,14 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from dataclasses import MISSING
+from __future__ import annotations
+
+from dataclasses import MISSING, field
 from typing import Literal
 
+from isaaclab_physx.renderers import IsaacRtxRendererCfg
+
+from isaaclab.renderers import RendererCfg
 from isaaclab.sim import FisheyeCameraCfg, PinholeCameraCfg
 from isaaclab.utils import configclass
 
@@ -141,3 +146,6 @@ class CameraCfg(SensorBaseCfg):
         }
 
     """
+
+    renderer_cfg: RendererCfg = field(default_factory=IsaacRtxRendererCfg)
+    """Renderer configuration for camera sensor."""

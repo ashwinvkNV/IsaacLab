@@ -128,6 +128,7 @@ class XformPrimView:
         # Validate all prims have standard xform operations
         if validate_xform_ops:
             for prim in self._prims:
+                sim_utils.standardize_xform_ops(prim)
                 if not sim_utils.validate_standard_xform_ops(prim):
                     raise ValueError(
                         f"Prim at path '{prim.GetPath().pathString}' is not a xformable prim with standard transform"
@@ -1082,9 +1083,6 @@ class XformPrimView:
         # Ensure Fabric is initialized
         if not self._fabric_initialized:
             self._initialize_fabric()
-
-        # Ensure authored USD transforms are flushed before reading into Fabric.
-        sim_utils.update_stage()
 
         # Read authoritative transforms from USD and write once into Fabric.
         positions_usd, orientations_usd = self._get_world_poses_usd()

@@ -79,6 +79,7 @@ The following modules are available in the ``isaaclab_contrib`` extension:
    actuators
    assets
    mdp
+   rl
    sensors
 
 isaaclab_tasks extension
@@ -96,6 +97,18 @@ It includes the following modules:
 
    utils
 
+isaaclab_teleop extension
+-------------------------
+
+The following modules are available in the ``isaaclab_teleop`` extension:
+
+.. currentmodule:: isaaclab_teleop
+
+.. toctree::
+   :maxdepth: 2
+
+   lab_teleop/isaaclab_teleop
+
 isaaclab_physx extension
 ------------------------
 
@@ -111,4 +124,4 @@ The following modules are available in the ``isaaclab_physx`` extension:
 .. toctree::
    :hidden:
 
-   lab_physx/isaaclab.assets
+   lab_physx/isaaclab_physx.assets

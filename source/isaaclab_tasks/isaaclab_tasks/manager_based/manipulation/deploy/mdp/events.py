@@ -11,6 +11,7 @@ import random
 from typing import TYPE_CHECKING
 
 import torch
+import warp as wp
 
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, RigidObject
@@ -265,24 +266,24 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         # IK loop
         for i in range(max_iterations):
             # Get current joint state
-            joint_pos = self.robot_asset.data.joint_pos[env_ids].clone()
-            joint_vel = self.robot_asset.data.joint_vel[env_ids].clone()
+            joint_pos = wp.to_torch(self.robot_asset.data.joint_pos)[env_ids].clone()
+            joint_vel = wp.to_torch(self.robot_asset.data.joint_vel)[env_ids].clone()
 
             # Stack all gear positions and quaternions
             all_gear_pos = torch.stack(
                 [
-                    env.scene["factory_gear_small"].data.root_link_pos_w,
-                    env.scene["factory_gear_medium"].data.root_link_pos_w,
-                    env.scene["factory_gear_large"].data.root_link_pos_w,
+                    wp.to_torch(env.scene["factory_gear_small"].data.root_link_pos_w),
+                    wp.to_torch(env.scene["factory_gear_medium"].data.root_link_pos_w),
+                    wp.to_torch(env.scene["factory_gear_large"].data.root_link_pos_w),
                 ],
                 dim=1,
             )[env_ids]
 
             all_gear_quat = torch.stack(
                 [
-                    env.scene["factory_gear_small"].data.root_link_quat_w,
-                    env.scene["factory_gear_medium"].data.root_link_quat_w,
-                    env.scene["factory_gear_large"].data.root_link_quat_w,
+                    wp.to_torch(env.scene["factory_gear_small"].data.root_link_quat_w),
+                    wp.to_torch(env.scene["factory_gear_medium"].data.root_link_quat_w),
+                    wp.to_torch(env.scene["factory_gear_large"].data.root_link_quat_w),
                 ],
                 dim=1,
             )[env_ids]
@@ -317,8 +318,8 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             )
 
             # Get end effector pose
-            eef_pos = self.robot_asset.data.body_pos_w[env_ids, self.eef_idx]
-            eef_quat = self.robot_asset.data.body_quat_w[env_ids, self.eef_idx]
+            eef_pos = wp.to_torch(self.robot_asset.data.body_pos_w)[env_ids, self.eef_idx]
+            eef_quat = wp.to_torch(self.robot_asset.data.body_quat_w)[env_ids, self.eef_idx]
 
             # Compute pose error
             pos_error, axis_angle_error = fc.get_pose_error(
@@ -332,8 +333,8 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             delta_hand_pose = torch.cat((pos_error, axis_angle_error), dim=-1)
 
             # Check convergence
-            pos_error_norm = torch.norm(pos_error, dim=-1)
-            rot_error_norm = torch.norm(axis_angle_error, dim=-1)
+            pos_error_norm = torch.linalg.norm(pos_error, dim=-1)
+            rot_error_norm = torch.linalg.norm(axis_angle_error, dim=-1)
 
             # print(f"pos_error_norm: {pos_error_norm}")
             # print(f"rot_error_norm: {rot_error_norm}")
@@ -342,7 +343,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
                 break
 
             # Solve IK using jacobian
-            jacobians = self.robot_asset.root_view.get_jacobians().clone()
+            jacobians = wp.to_torch(self.robot_asset.root_view.get_jacobians()).clone()
             jacobian = jacobians[env_ids, self.jacobi_body_idx, :, :]
 
             delta_dof_pos = fc._get_delta_dof_pos(
@@ -378,9 +379,10 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             joint_vel = torch.zeros_like(joint_pos)
 
             # Write to sim
-            self.robot_asset.set_joint_position_target(joint_pos, env_ids=env_ids)
-            self.robot_asset.set_joint_velocity_target(joint_vel, env_ids=env_ids)
-            self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+            self.robot_asset.set_joint_position_target_index(target=joint_pos, env_ids=env_ids)
+            self.robot_asset.set_joint_velocity_target_index(target=joint_vel, env_ids=env_ids)
+            self.robot_asset.write_joint_position_to_sim_index(position=joint_pos, env_ids=env_ids)
+            self.robot_asset.write_joint_velocity_to_sim_index(velocity=joint_vel, env_ids=env_ids)
 
 
         # for _ in range(5):
@@ -391,7 +393,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         joint_vel = torch.zeros_like(self.robot_asset.data.joint_vel[env_ids])
 
         # Set gripper to grasp position
-        joint_pos = self.robot_asset.data.joint_pos[env_ids].clone()
+        joint_pos = wp.to_torch(self.robot_asset.data.joint_pos)[env_ids].clone()
 
         # Get gear types for all environments
         all_gear_types = gear_type_manager.get_all_gear_types()
@@ -400,8 +402,9 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             hand_grasp_width = self.hand_grasp_width[gear_key]
             self.gripper_joint_setter_func(joint_pos, [row_idx], self.finger_joints, hand_grasp_width)
 
-        self.robot_asset.set_joint_position_target(joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
-        self.robot_asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        self.robot_asset.set_joint_position_target_index(target=joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
+        self.robot_asset.write_joint_position_to_sim_index(position=joint_pos, env_ids=env_ids)
+        self.robot_asset.write_joint_velocity_to_sim_index(velocity=joint_vel, env_ids=env_ids)
 
         # for _ in range(5):
         #     env.sim.render()
@@ -413,7 +416,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             hand_close_width = self.hand_close_width[gear_key]
             self.gripper_joint_setter_func(joint_pos, [row_idx], self.finger_joints, hand_close_width)
 
-        self.robot_asset.set_joint_position_target(joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
+        self.robot_asset.set_joint_position_target_index(target=joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
 
 
 class randomize_gears_and_base_pose(ManagerTermBase):
@@ -492,10 +495,11 @@ class randomize_gears_and_base_pose(ManagerTermBase):
         asset_names_to_process = [self.base_asset_name] + self.gear_asset_names
         for asset_name in asset_names_to_process:
             asset: RigidObject | Articulation = env.scene[asset_name]
-            root_states = asset.data.default_root_state[env_ids].clone()
-            positions = root_states[:, 0:3] + env.scene.env_origins[env_ids] + rand_pose_samples[:, 0:3]
-            orientations = math_utils.quat_mul(root_states[:, 3:7], orientations_delta)
-            velocities = root_states[:, 7:13] + rand_vel_samples
+            default_root_pose = wp.to_torch(asset.data.default_root_pose)[env_ids].clone()
+            default_root_vel = wp.to_torch(asset.data.default_root_vel)[env_ids].clone()
+            positions = default_root_pose[:, 0:3] + env.scene.env_origins[env_ids] + rand_pose_samples[:, 0:3]
+            orientations = math_utils.quat_mul(default_root_pose[:, 3:7], orientations_delta)
+            velocities = default_root_vel + rand_vel_samples
             positions_by_asset[asset_name] = positions
             orientations_by_asset[asset_name] = orientations
             velocities_by_asset[asset_name] = velocities
@@ -525,5 +529,5 @@ class randomize_gears_and_base_pose(ManagerTermBase):
             positions = positions_by_asset[asset_name]
             orientations = orientations_by_asset[asset_name]
             velocities = velocities_by_asset[asset_name]
-            asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
-            asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
+            asset.write_root_pose_to_sim_index(root_pose=torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
+            asset.write_root_velocity_to_sim_index(root_velocity=velocities, env_ids=env_ids)

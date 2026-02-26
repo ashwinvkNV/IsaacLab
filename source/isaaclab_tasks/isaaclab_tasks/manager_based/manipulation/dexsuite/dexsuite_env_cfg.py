@@ -5,6 +5,8 @@
 
 from dataclasses import MISSING
 
+from isaaclab_physx.physics import PhysxCfg
+
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedEnvCfg, ViewerCfg
@@ -184,13 +186,6 @@ class ObservationsCfg:
 @configclass
 class EventCfg:
     """Configuration for randomization."""
-
-    # -- pre-startup
-    randomize_object_scale = EventTerm(
-        func=mdp.randomize_rigid_body_scale,
-        mode="prestartup",
-        params={"scale_range": (0.75, 1.5), "asset_cfg": SceneEntityCfg("object")},
-    )
 
     robot_physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
@@ -393,7 +388,7 @@ class DexsuiteReorientEnvCfg(ManagerBasedEnvCfg):
 
     # Scene settings
     viewer: ViewerCfg = ViewerCfg(eye=(-2.25, 0.0, 0.75), lookat=(0.0, 0.0, 0.45), origin_type="env")
-    scene: SceneCfg = SceneCfg(num_envs=4096, env_spacing=3, replicate_physics=False)
+    scene: SceneCfg = SceneCfg(num_envs=4096, env_spacing=3, replicate_physics=True)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -425,9 +420,10 @@ class DexsuiteReorientEnvCfg(ManagerBasedEnvCfg):
         # simulation settings
         self.sim.dt = 1 / 120
         self.sim.render_interval = self.decimation
-        self.sim.physx.bounce_threshold_velocity = 0.2
-        self.sim.physx.bounce_threshold_velocity = 0.01
-        self.sim.physx.gpu_max_rigid_patch_count = 4 * 5 * 2**15
+        self.sim.physics = PhysxCfg(
+            bounce_threshold_velocity=0.01,
+            gpu_max_rigid_patch_count=4 * 5 * 2**15,
+        )
 
         if self.curriculum is not None:
             self.curriculum.adr.params["pos_tol"] = self.rewards.success.params["pos_std"] / 2

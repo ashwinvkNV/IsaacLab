@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import builtins
 import inspect
 import re
 import weakref
@@ -15,11 +14,9 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-import omni.kit.app
-import omni.timeline
-from isaacsim.core.simulation_manager import IsaacEvents, SimulationManager
-
 import isaaclab.sim as sim_utils
+from isaaclab.physics import PhysicsEvent, PhysicsManager
+from isaaclab.sim.simulation_context import SimulationContext
 from isaaclab.sim.utils.stage import get_current_stage
 
 if TYPE_CHECKING:
@@ -44,10 +41,10 @@ class AssetBase(ABC):
     at the configured path. For more information on the spawn configuration, see the
     :mod:`isaaclab.sim.spawners` module.
 
-    Unlike Isaac Sim interface, where one usually needs to call the
-    :meth:`isaacsim.core.prims.XFormPrim.initialize` method to initialize the PhysX handles, the asset
-    class automatically initializes and invalidates the PhysX handles when the stage is played/stopped. This
-    is done by registering callbacks for the stage play/stop events.
+    Unlike backend-specific interfaces (e.g. Isaac Sim PhysX) where one usually needs to call
+    initialize explicitly, the asset class automatically initializes and invalidates physics
+    handles when the simulation is ready or stopped. This is done by registering callbacks
+    for the physics lifecycle events (:attr:`PhysicsEvent.PHYSICS_READY`, :attr:`PhysicsEvent.STOP`).
 
     Additionally, the class registers a callback for debug visualization of the asset if a debug visualization
     is implemented in the asset class. This can be enabled by setting the :attr:`AssetBaseCfg.debug_vis` attribute
@@ -73,24 +70,25 @@ class AssetBase(ABC):
         # get stage handle
         self.stage = get_current_stage()
 
-        # check if base asset path is valid
-        # note: currently the spawner does not work if there is a regex pattern in the leaf
-        #   For example, if the prim path is "/World/Robot_[1,2]" since the spawner will not
-        #   know which prim to spawn. This is a limitation of the spawner and not the asset.
-        asset_path = self.cfg.prim_path.split("/")[-1]
-        asset_path_is_regex = re.match(r"^[a-zA-Z0-9/_]+$", asset_path) is None
         # spawn the asset
-        if self.cfg.spawn is not None and not asset_path_is_regex:
+        # determine path where prims should exist after spawn
+        if self.cfg.spawn is not None:
+            # Use spawn_path if set (by InteractiveScene), otherwise fall back to prim_path
+            check_path = self.cfg.spawn.spawn_path if self.cfg.spawn.spawn_path is not None else self.cfg.prim_path
             self.cfg.spawn.func(
-                self.cfg.prim_path,
+                check_path,
                 self.cfg.spawn,
                 translation=self.cfg.init_state.pos,
                 orientation=self.cfg.init_state.rot,
             )
-        # check that spawn was successful
-        matching_prims = sim_utils.find_matching_prims(self.cfg.prim_path)
+        else:
+            # asset should already exist at prim_path
+            check_path = self.cfg.prim_path
+
+        # check that prims exist
+        matching_prims = sim_utils.find_matching_prims(check_path)
         if len(matching_prims) == 0:
-            raise RuntimeError(f"Could not find prim with path {self.cfg.prim_path}.")
+            raise RuntimeError(f"Could not find prim with path {check_path}.")
 
         # register various callback functions
         self._register_callbacks()
@@ -193,16 +191,18 @@ class AssetBase(ABC):
             return False
         # toggle debug visualization objects
         self._set_debug_vis_impl(debug_vis)
-        # toggle debug visualization handles
+        # toggle debug visualization handles (Kit/omni only for PhysX backend)
         if debug_vis:
-            # create a subscriber for the post update event if it doesn't exist
             if self._debug_vis_handle is None:
-                app_interface = omni.kit.app.get_app_interface()
-                self._debug_vis_handle = app_interface.get_post_update_event_stream().create_subscription_to_pop(
-                    lambda event, obj=weakref.proxy(self): obj._debug_vis_callback(event)
-                )
+                sim_ctx = SimulationContext.instance()
+                if sim_ctx and "Physx" in sim_ctx.physics_manager.__name__:
+                    import omni.kit.app
+
+                    app_interface = omni.kit.app.get_app_interface()
+                    self._debug_vis_handle = app_interface.get_post_update_event_stream().create_subscription_to_pop(
+                        lambda event, obj=weakref.proxy(self): obj._debug_vis_callback(event)
+                    )
         else:
-            # remove the subscriber if it exists
             if self._debug_vis_handle is not None:
                 self._debug_vis_handle.unsubscribe()
                 self._debug_vis_handle = None
@@ -241,7 +241,7 @@ class AssetBase(ABC):
 
     @abstractmethod
     def _initialize_impl(self):
-        """Initializes the PhysX handles and internal buffers."""
+        """Initializes the physics handles and internal buffers for the current backend."""
         raise NotImplementedError
 
     def _set_debug_vis_impl(self, debug_vis: bool):
@@ -265,9 +265,9 @@ class AssetBase(ABC):
     """
 
     def _register_callbacks(self):
-        """Registers the timeline and prim deletion callbacks."""
+        """Registers physics lifecycle callbacks via the current backend's physics manager."""
+        physics_mgr_cls = SimulationContext.instance().physics_manager
 
-        # register simulator callbacks (with weakref safety to avoid crashes on deletion)
         def safe_callback(callback_name, event, obj_ref):
             """Safely invoke a callback on a weakly-referenced object, ignoring ReferenceError if deleted."""
             try:
@@ -278,47 +278,52 @@ class AssetBase(ABC):
                 pass
 
         # note: use weakref on callbacks to ensure that this object can be deleted when its destructor is called.
-        # add callbacks for stage play/stop
         obj_ref = weakref.proxy(self)
-        timeline_event_stream = omni.timeline.get_timeline_interface().get_timeline_event_stream()
 
-        # the order is set to 10 which is arbitrary but should be lower priority than the default order of 0
-        # register timeline PLAY event callback (lower priority with order=10)
-        self._initialize_handle = timeline_event_stream.create_subscription_to_pop_by_type(
-            int(omni.timeline.TimelineEventType.PLAY),
-            lambda event, obj_ref=obj_ref: safe_callback("_initialize_callback", event, obj_ref),
+        # Backend-agnostic: PHYSICS_READY (init) and STOP (invalidate)
+        self._initialize_handle = physics_mgr_cls.register_callback(
+            lambda payload, obj_ref=obj_ref: safe_callback("_initialize_callback", payload, obj_ref),
+            PhysicsEvent.PHYSICS_READY,
             order=10,
         )
-        # register timeline STOP event callback (lower priority with order=10)
-        self._invalidate_initialize_handle = timeline_event_stream.create_subscription_to_pop_by_type(
-            int(omni.timeline.TimelineEventType.STOP),
-            lambda event, obj_ref=obj_ref: safe_callback("_invalidate_initialize_callback", event, obj_ref),
+        self._invalidate_initialize_handle = physics_mgr_cls.register_callback(
+            lambda payload, obj_ref=obj_ref: safe_callback("_invalidate_initialize_callback", payload, obj_ref),
+            PhysicsEvent.STOP,
             order=10,
         )
-        # register prim deletion callback
-        self._prim_deletion_callback_id = SimulationManager.register_callback(
-            lambda event, obj_ref=obj_ref: safe_callback("_on_prim_deletion", event, obj_ref),
-            event=IsaacEvents.PRIM_DELETION,
-        )
+        # Optional: prim deletion (only supported by PhysX backend)
+        self._prim_deletion_handle = None
+        physics_backend = physics_mgr_cls.__name__
+        if "Physx" in physics_backend:
+            from isaaclab_physx.physics import IsaacEvents
+
+            self._prim_deletion_handle = physics_mgr_cls.register_callback(
+                lambda event, obj_ref=obj_ref: safe_callback("_on_prim_deletion", event, obj_ref),
+                IsaacEvents.PRIM_DELETION,
+            )
 
     def _initialize_callback(self, event):
         """Initializes the scene elements.
 
         .. note::
-            PhysX handles are only enabled once the simulator starts playing. Hence, this function needs to be
-            called whenever the simulator "plays" from a "stop" state.
+            Physics handles are only valid once the simulation is ready. This callback runs when
+            :attr:`PhysicsEvent.PHYSICS_READY` is dispatched by the current backend.
         """
         if not self._is_initialized:
-            # obtain simulation related information
-            self._backend = SimulationManager.get_backend()
-            self._device = SimulationManager.get_physics_sim_device()
-            # initialize the asset
+            self._backend = PhysicsManager.get_backend()
+            self._device = PhysicsManager.get_device()
             try:
                 self._initialize_impl()
             except Exception as e:
-                if builtins.ISAACLAB_CALLBACK_EXCEPTION is None:
-                    builtins.ISAACLAB_CALLBACK_EXCEPTION = e
-            # set flag
+                store_fn = getattr(
+                    SimulationContext.instance().physics_manager,
+                    "store_callback_exception",
+                    None,
+                )
+                if callable(store_fn):
+                    store_fn(e)
+                else:
+                    raise
             self._is_initialized = True
 
     def _invalidate_initialize_callback(self, event):
@@ -328,15 +333,13 @@ class AssetBase(ABC):
             self._debug_vis_handle.unsubscribe()
             self._debug_vis_handle = None
 
-    def _on_prim_deletion(self, prim_path: str) -> None:
-        """Invalidates and deletes the callbacks when the prim is deleted.
+    def _on_prim_deletion(self, event) -> None:
+        """Invalidates and clears callbacks when the prim is deleted.
 
-        Args:
-            prim_path: The path to the prim that is being deleted.
-
-        .. note::
-            This function is called when the prim is deleted.
+        Only used when the backend supports prim deletion events (e.g. PhysX).
         """
+        payload = getattr(event, "payload", event) if not isinstance(event, dict) else event
+        prim_path = payload.get("prim_path", "") if isinstance(payload, dict) else ""
         if prim_path == "/":
             self._clear_callbacks()
             return
@@ -347,17 +350,16 @@ class AssetBase(ABC):
             self._clear_callbacks()
 
     def _clear_callbacks(self) -> None:
-        """Clears the callbacks."""
-        if self._prim_deletion_callback_id:
-            SimulationManager.deregister_callback(self._prim_deletion_callback_id)
-            self._prim_deletion_callback_id = None
-        if self._initialize_handle:
-            self._initialize_handle.unsubscribe()
+        """Clears all registered callbacks."""
+        if self._initialize_handle is not None:
+            self._initialize_handle.deregister()
             self._initialize_handle = None
-        if self._invalidate_initialize_handle:
-            self._invalidate_initialize_handle.unsubscribe()
+        if self._invalidate_initialize_handle is not None:
+            self._invalidate_initialize_handle.deregister()
             self._invalidate_initialize_handle = None
-        # clear debug visualization
-        if self._debug_vis_handle:
+        if self._prim_deletion_handle is not None:
+            self._prim_deletion_handle.deregister()
+            self._prim_deletion_handle = None
+        if self._debug_vis_handle is not None:
             self._debug_vis_handle.unsubscribe()
             self._debug_vis_handle = None

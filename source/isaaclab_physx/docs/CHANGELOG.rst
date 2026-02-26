@@ -1,6 +1,123 @@
 Changelog
 ---------
 
+0.5.1 (2026-02-25)
+~~~~~~~~~~~~~~~~~~
+
+Changed
+^^^^^^^
+
+* Updated ContactSensor ``body_names`` property to use ``num_sensors`` instead of
+  deprecated ``num_bodies``.
+
+
+0.5.0 (2026-02-24)
+~~~~~~~~~~~~~~~~~~
+
+Changed
+^^^^^^^
+
+* Aligned asset API with the multi-backend architecture. Base class abstract methods
+  in :class:`~isaaclab.assets.BaseArticulation` and :class:`~isaaclab.assets.BaseRigidObject`
+  have been refined so that PhysX and Newton backends share a consistent interface.
+
+* Improved docstrings across all asset classes with precise shape and dtype annotations
+  for warp array properties and write methods.
+
+* Migrated tests to use the new ``_index`` / ``_mask`` write method APIs, removing
+  usage of deprecated write methods.
+
+
+0.4.1 (2026-02-18)
+~~~~~~~~~~~~~~~~~~
+
+Fixed
+^^^^^
+
+* Fixed a bug in :meth:~isaaclab_physx.assets.Articulation.process_actuators_cfg where explicit actuator joints could receive non-zero PhysX stiffness/damping, causing double PD control.
+
+
+0.4.0 (2026-02-13)
+~~~~~~~~~~~~~~~~~~
+
+Changed
+^^^^^^^
+
+* Migrated all PhysX asset classes to warp backend:
+  :class:`~isaaclab_physx.assets.Articulation`,
+  :class:`~isaaclab_physx.assets.RigidObject`,
+  :class:`~isaaclab_physx.assets.RigidObjectCollection`,
+  :class:`~isaaclab_physx.assets.DeformableObject`, and
+  :class:`~isaaclab_physx.assets.SurfaceGripper`.
+  Internal state buffers now use ``wp.array`` with structured warp types
+  (``wp.vec3f``, ``wp.quatf``, ``wp.transformf``, ``wp.spatial_vectorf``).
+
+* Migrated all PhysX sensor classes to warp backend:
+  :class:`~isaaclab_physx.sensors.ContactSensor`,
+  :class:`~isaaclab_physx.sensors.Imu`, and
+  :class:`~isaaclab_physx.sensors.FrameTransformer`.
+
+* Split all write methods into ``_index`` and ``_mask`` variants for explicit
+  sparse-index vs. boolean-mask semantics.
+
+Added
+^^^^^
+
+* Added warp kernel modules for fused GPU computations:
+
+  * :mod:`isaaclab_physx.assets.kernels` — shared kernels for root state extraction,
+    velocity transforms, and data write-back.
+  * :mod:`isaaclab_physx.assets.articulation.kernels` — articulation-specific kernels
+    for joint state, body properties, and COM computations.
+  * :mod:`isaaclab_physx.assets.deformable_object.kernels` — nodal state and mean
+    vertex computations.
+  * :mod:`isaaclab_physx.assets.rigid_object_collection.kernels` — 2D indexed kernels
+    for multi-body collections.
+  * :mod:`isaaclab_physx.sensors.contact_sensor.kernels` — contact force aggregation
+    and history buffer management.
+  * :mod:`isaaclab_physx.sensors.imu.kernels` — fused IMU update combining acceleration,
+    gyroscope, and gravity projection.
+  * :mod:`isaaclab_physx.sensors.frame_transformer.kernels` — frame transform computations.
+
+* Added warp-based mock PhysX views for unit testing:
+  ``MockArticulationViewWarp``, ``MockRigidBodyViewWarp``, ``MockRigidContactViewWarp``.
+
+
+0.3.0 (2026-02-11)
+~~~~~~~~~~~~~~~~~~
+
+Changed
+^^^^^^^
+
+* Refactored :class:`~isaaclab_physx.physics.PhysxManager` to properly handle physics initialization
+  order. ``attach_stage()`` is now called before ``start_simulation()`` to ensure GPU buffers are
+  correctly allocated.
+* Removed ``device`` field from :class:`~isaaclab_physx.physics.PhysxManagerCfg`. Device is now
+  inherited from :attr:`SimulationCfg.device`.
+
+Added
+^^^^^
+
+* Added :class:`~isaaclab_physx.physics.PhysxManager` as the concrete PhysX backend implementation
+  of :class:`~isaaclab.physics.PhysicsManager`.
+* Added :class:`~isaaclab_physx.physics.IsaacEvents` enum for PhysX-specific simulation events.
+* Added monkey-patching of ``isaacsim.core.simulation_manager.SimulationManager`` in package init
+  to ensure Isaac Sim uses :class:`~isaaclab_physx.physics.PhysxManager` for callback handling.
+
+
+0.2.0 (2026-02-05)
+~~~~~~~~~~~~~~~~~~
+
+Changed
+^^^^^^^
+
+* Updated all PhysX benchmarks in :mod:`isaaclab_physx.benchmark` to use the new
+  :class:`~isaaclab.test.benchmark.BaseIsaacLabBenchmark` framework from ``isaaclab.test.benchmark``.
+
+* Added support for configurable output backends via ``--benchmark_backend`` argument.
+  Supported backends: ``json``, ``osmo``, ``omniperf``.
+
+
 0.1.4 (2026-02-05)
 ~~~~~~~~~~~~~~~~~~
 

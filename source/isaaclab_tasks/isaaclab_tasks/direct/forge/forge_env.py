@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 import numpy as np
 import torch
+import warp as wp
 
 from isaaclab.utils.math import (
     axis_angle_from_quat,
@@ -95,7 +96,9 @@ class ForgeEnv(FactoryEnv):
         self.prev_fingertip_quat = self.noisy_fingertip_quat.clone()
 
         # Update and smooth force values.
-        self.force_sensor_world = self._robot.root_view.get_link_incoming_joint_force()[:, self.force_sensor_body_idx]
+        self.force_sensor_world = wp.to_torch(self._robot.root_view.get_link_incoming_joint_force())[
+            :, self.force_sensor_body_idx
+        ]
 
         alpha = self.cfg.ft_smoothing_factor
         self.force_sensor_world_smooth = alpha * self.force_sensor_world + (1 - alpha) * self.force_sensor_world_smooth
@@ -235,10 +238,10 @@ class ForgeEnv(FactoryEnv):
 
         rew_dict, rew_scales = {}, {}
         # Calculate action penalty for the asset-relative action space.
-        pos_error = torch.norm(self.delta_pos, p=2, dim=-1) / self.cfg.ctrl.pos_action_threshold[0]
+        pos_error = torch.linalg.norm(self.delta_pos, ord=2, dim=-1) / self.cfg.ctrl.pos_action_threshold[0]
         rot_error = torch.abs(self.delta_yaw) / self.cfg.ctrl.rot_action_threshold[0]
         # Contact penalty.
-        contact_force = torch.norm(self.force_sensor_smooth[:, 0:3], p=2, dim=-1, keepdim=False)
+        contact_force = torch.linalg.norm(self.force_sensor_smooth[:, 0:3], ord=2, dim=-1, keepdim=False)
         contact_penalty = torch.nn.functional.relu(contact_force - self.contact_penalty_thresholds)
         # Add success prediction rewards.
         check_rot = self.cfg_task.name == "nut_thread"

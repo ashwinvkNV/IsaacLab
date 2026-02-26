@@ -3,9 +3,14 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from dataclasses import MISSING
+from __future__ import annotations
 
-from isaaclab.devices.openxr import XrCfg
+from dataclasses import MISSING
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from isaaclab.devices.openxr import XrCfg
+
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
