@@ -164,8 +164,8 @@ class EventCfg:
     randomize_gear_type = EventTerm(
         func=gear_assembly_events.randomize_gear_type,
         mode="reset",
-        params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
-        # params={"gear_types": ["gear_small"]},
+        # params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
+        params={"gear_types": ["gear_large"]},
     )
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
@@ -319,9 +319,9 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
                     "joint1": 0.0,
                     "joint2": -0.698,
                     "joint3": 0.0,
-                    "joint4": 1.571,
+                    "joint4": 1.79769,
                     "joint5": 0.0,
-                    "joint6": 0.698,
+                    "joint6": 0.820,
                     "joint7": 0.0,
                 },
                 pos=(0.0, 0.0, 0.0),
@@ -343,25 +343,25 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
         # Override gear initial states for Rizon
         # Gear base
         self.scene.factory_gear_base.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(-0.6, 0.0, -0.1),
+            pos=(0.63, -0.083, -0.1),
             rot=(0.0, 0.0, 0.70711, 0.70711),
         )
 
         # Small gear
         self.scene.factory_gear_small.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(-0.6, 0.0, -0.1),
+            pos=(0.63, -0.083, -0.1),
             rot=(0.0, 0.0, 0.70711, 0.70711),
         )
 
         # Medium gear
         self.scene.factory_gear_medium.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(-0.6, 0.0, -0.1),
+            pos=(0.63, -0.083, -0.1),
             rot=(0.0, 0.0, 0.70711, 0.70711),
         )
 
         # Large gear
         self.scene.factory_gear_large.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(-0.6, 0.0, -0.1),
+            pos=(0.63, -0.083, -0.1),
             rot=(0.0, 0.0, 0.70711, 0.70711),
         )
 
