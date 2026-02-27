@@ -175,8 +175,8 @@ class EventCfg:
         mode="reset",
         params={
             "pose_range": {
-                "x": [-0.1, 0.1],
-                "y": [-0.1, 0.1],
+                "x": [-0.05, 0.05],
+                "y": [-0.05, 0.05],
                 "z": [-0.1, 0.1],
                 "roll": [-math.pi / 90, math.pi / 90],  # 2 degree
                 "pitch": [-math.pi / 90, math.pi / 90],  # 2 degree
