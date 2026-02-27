@@ -164,8 +164,8 @@ class EventCfg:
     randomize_gear_type = EventTerm(
         func=gear_assembly_events.randomize_gear_type,
         mode="reset",
-        params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
-        # params={"gear_types": ["gear_small"]},
+        # params={"gear_types": ["gear_small", "gear_medium", "gear_large"]},
+        params={"gear_types": ["gear_large"]},
     )
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
@@ -393,7 +393,7 @@ class Rizon4sGravGearAssemblyEnvCfg(Rizon4sGearAssemblyEnvCfg):
 
         # Grasp widths for Grav gripper (these values may need adjustment based on actual gripper)
         # 45 degrees in radians
-        self.hand_grasp_width = {"gear_small": 0.05, "gear_medium": 0.2, "gear_large": 0.28}
+        self.hand_grasp_width = {"gear_small": 0.05, "gear_medium": 0.2, "gear_large": 0.3}
 
         # Close widths for Grav gripper
         self.hand_close_width = {"gear_small": 0.0, "gear_medium": 0.139626, "gear_large": 0.139626}
