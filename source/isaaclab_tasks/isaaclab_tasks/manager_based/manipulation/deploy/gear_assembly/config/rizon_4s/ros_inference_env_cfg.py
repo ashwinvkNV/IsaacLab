@@ -13,12 +13,19 @@ from .joint_pos_env_cfg import Rizon4sGearAssemblyEnvCfg
 
 @configclass
 class Rizon4sGearAssemblyROSInferenceEnvCfg(Rizon4sGearAssemblyEnvCfg):
-    """Configuration for ROS inference with Flexiv Rizon 4s and Grav gripper.
+    """ROS / Isaac Manipulator inference fields plus deployment alignment for NVIDIA Hubble Lab.
 
     This configuration:
     - Exposes variables needed for ROS inference
     - Overrides robot and gear initial poses for fixed/deterministic setup
+    - Aligns robot mounting pose with the Flexiv Rizon 4s installation at NVIDIA Hubble Lab
     """
+
+    # Single source for base + all gear rigid bodies (Rizon: closer to robot, centered)
+    ros_inference_factory_gears_init_state: RigidObjectCfg.InitialStateCfg = RigidObjectCfg.InitialStateCfg(
+        pos=(0.75, 0.0, -0.2),
+        rot=(0.0, 0.0, 0.70711, -0.70711),
+    )
 
     def __post_init__(self):
         # post init of parent
@@ -46,35 +53,39 @@ class Rizon4sGearAssemblyROSInferenceEnvCfg(Rizon4sGearAssemblyEnvCfg):
         # Dynamically generate action_scale_joint_space based on action_space
         self.action_scale_joint_space = [self.joint_action_scale] * self.action_space
 
-        # Override robot initial pose for ROS inference (fixed pose, no randomization)
-        # Joint positions and pos are inherited from parent, only override rotation to be deterministic
-        self.scene.robot.init_state.rot = (0.0, 0.0, 0.0, 1.0)  # Identity quaternion (x, y, z, w)
+        # --- NVIDIA Hubble Lab: Flexiv Rizon 4s mount ---
+        # Remove vertical mount stand since Hubble deployment does not use the sim stand asset
+        self.scene.stand = None
 
-        # Override gear base initial pose (fixed pose for ROS inference)
-        # Position configured for Rizon 4s workspace
-        self.scene.factory_gear_base.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(0.481, -0.073, -0.005),
-            rot=(0.0, 0.0, 0.70711, -0.70711),
-        )
+        # Lab home joint pose (radians); aligns sim defaults / reset with the physical stand
+        self.scene.robot.init_state.joint_pos = {
+            "joint1": math.radians(-90.0),
+            "joint2": math.radians(90.0),
+            "joint3": 0.0,
+            "joint4": math.radians(90.0),
+            "joint5": 0.0,
+            "joint6": 0.0,
+            "joint7": 0.0,
+        }
 
-        # Override gear initial poses (fixed poses for ROS inference)
-        # Small gear
-        self.scene.factory_gear_small.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(0.481, -0.073, -0.005),
-            rot=(0.0, 0.0, 0.70711, -0.70711),
-        )
+        # Orientation of robot is based on the Flexiv Rizon 4s mount in the Hubble Lab
+        self.scene.robot.init_state.pos = (0.0, 0.0, 0.0)
+        self.scene.robot.init_state.rot = (0.5, 0.5, 0.5, 0.5)
 
-        # Medium gear
-        self.scene.factory_gear_medium.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(0.481, -0.073, -0.005),
-            rot=(0.0, 0.0, 0.70711, -0.70711),
-        )
-
-        # Large gear
-        self.scene.factory_gear_large.init_state = RigidObjectCfg.InitialStateCfg(
-            pos=(0.481, -0.073, -0.005),
-            rot=(0.0, 0.0, 0.70711, -0.70711),
-        )
+        # Override gear base + all gears from one template (fixed pose for ROS inference)
+        _g = self.ros_inference_factory_gears_init_state
+        for _name in (
+            "factory_gear_base",
+            "factory_gear_small",
+            "factory_gear_medium",
+            "factory_gear_large",
+        ):
+            getattr(self.scene, _name).init_state = RigidObjectCfg.InitialStateCfg(
+                pos=_g.pos,
+                rot=_g.rot,
+                lin_vel=_g.lin_vel,
+                ang_vel=_g.ang_vel,
+            )
 
         # Fixed asset parameters for ROS inference - derived from configuration
         # These parameters are used by the ROS inference node to validate the environment setup
