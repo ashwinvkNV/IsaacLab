@@ -341,7 +341,7 @@ class GearAssemblyEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 6.66
         self.viewer.eye = (3.5, 3.5, 3.5)
         # simulation settings
-        self.decimation = 33
+        self.decimation = 2
         self.sim.render_interval = self.decimation
         self.sim.dt = 1.0 / 1000.0
 
