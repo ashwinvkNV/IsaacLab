@@ -178,6 +178,7 @@ class _DataProxy:
             entity_name=object.__getattribute__(self, "_entity_name"),
             property_name=name,
             task_name=object.__getattribute__(self, "_task_name"),
+            cache=cache,
         )
         cache[cache_key] = traced
         return traced

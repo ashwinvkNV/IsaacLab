@@ -11,8 +11,8 @@ import torch
 
 import isaaclab.utils.leapp.export_annotator as export_annotator
 from isaaclab.utils.leapp import (
-    ExportPatcher,
     XYZ_ELEMENT_NAMES,
+    ExportPatcher,
     leapp_observation_input,
     resolve_leapp_element_names,
     resolve_leapp_observation_input_semantics,
