@@ -103,7 +103,7 @@ class ExportPatcher:
         self.task_name: str | None = None
         self.export_method = export_method
         self.required_obs_groups = required_obs_groups
-        self._annotated_tensor_cache: dict[tuple[int, str], TracedProxyArray] = {}
+        self._annotated_tensor_cache: dict[tuple, TracedProxyArray | torch.Tensor] = {}
         self._data_property_resolution_cache: dict[tuple[type, str], tuple[Callable, object] | None] = {}
         self._write_method_resolution_cache: dict[
             tuple[type, str], tuple[Callable, object, inspect.Signature] | None
