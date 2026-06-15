@@ -19,6 +19,8 @@ from isaaclab.utils.leapp.export_annotator import ExportPatcher
 from isaaclab.utils.leapp.leapp_semantics import InputKindEnum
 from isaaclab.utils.leapp.proxy import _DataProxy, _EnvProxy
 
+from isaaclab_tasks.contrib.deploy.mdp.actions import DeployRelativeJointPositionAction
+
 
 class _TestScene(dict):
     """Minimal scene mapping for LEAPP proxy tests."""
@@ -102,3 +104,44 @@ def test_projected_gravity_observation_exports_root_quat_w_input(monkeypatch: py
     assert semantics.name == "robot_root_quat_w"
     assert semantics.kind == InputKindEnum.BODY_ROTATION
     assert semantics.extra == {"isaaclab_connection": "state:robot:root_quat_w"}
+
+
+def test_deploy_relative_joint_position_action_exports_selected_current_joint_pos(monkeypatch: pytest.MonkeyPatch):
+    """Test the deploy relative action exposes selected current joint positions as a LEAPP input."""
+    annotated_inputs = _capture_leapp_inputs(monkeypatch)
+    data = MockArticulationData(num_instances=1, num_joints=4, num_bodies=0, device="cpu")
+    data.joint_names = ["joint1", "finger_joint", "joint2", "finger_mimic_joint"]
+    data.set_joint_pos(torch.tensor([[1.0, 10.0, 2.0, 20.0]], dtype=torch.float32))
+    real_asset = SimpleNamespace(data=data)
+
+    class _ArticulationWriteProxy:
+        def __init__(self):
+            self._real_asset = real_asset
+            self.target = None
+            self.joint_ids = None
+
+        def set_joint_position_target_index(self, target, joint_ids):
+            self.target = target
+            self.joint_ids = joint_ids
+
+    asset_proxy = _ArticulationWriteProxy()
+    action = DeployRelativeJointPositionAction.__new__(DeployRelativeJointPositionAction)
+    action.cfg = SimpleNamespace(asset_name="robot")
+    action._env = SimpleNamespace(unwrapped=SimpleNamespace(spec=SimpleNamespace(id="Task-v0")))
+    action._asset = asset_proxy
+    action._joint_ids = [0, 2]
+    action._joint_names = ["joint1", "joint2"]
+    action._processed_actions = torch.tensor([[0.1, 0.2]], dtype=torch.float32)
+
+    DeployRelativeJointPositionAction.apply_actions(action)
+
+    assert len(annotated_inputs) == 1
+    task_name, semantics = annotated_inputs[0]
+    assert task_name == "Task-v0"
+    assert semantics.name == "robot_current_joint_pos"
+    assert semantics.kind == InputKindEnum.JOINT_POSITION
+    assert semantics.element_names == [["joint1", "joint2"]]
+    assert semantics.extra == {"isaaclab_connection": "state:robot:joint_pos"}
+    assert torch.allclose(semantics.ref, torch.tensor([[1.0, 2.0]], dtype=torch.float32))
+    assert torch.allclose(asset_proxy.target, torch.tensor([[1.1, 2.2]], dtype=torch.float32))
+    assert asset_proxy.joint_ids == [0, 2]
