@@ -8,6 +8,7 @@
 import pytest
 
 import isaaclab_tasks  # noqa: F401
+import isaaclab_tasks.contrib.deploy.mdp.observations as deploy_observations
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 
@@ -23,3 +24,20 @@ def test_ur10e_gear_assembly_default_num_envs(task_name: str):
     env_cfg = parse_env_cfg(task_name)
 
     assert env_cfg.scene.num_envs == 2048
+
+
+def test_rizon_gear_assembly_uses_deploy_joint_observations():
+    """Rizon ROS inference should use deploy joint observations, not the generic full-articulation terms."""
+    env_cfg = parse_env_cfg("Isaac-Deploy-GearAssembly-Rizon4s-Grav-ROS-Inference-v0")
+
+    assert env_cfg.observations.policy.joint_pos.func is deploy_observations.joint_pos
+    assert env_cfg.observations.policy.joint_vel.func is deploy_observations.joint_vel
+    assert env_cfg.observations.policy.joint_pos.params["asset_cfg"].joint_names == [
+        "joint1",
+        "joint2",
+        "joint3",
+        "joint4",
+        "joint5",
+        "joint6",
+        "joint7",
+    ]
