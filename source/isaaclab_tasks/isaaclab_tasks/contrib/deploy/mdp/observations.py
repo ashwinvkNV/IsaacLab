@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from .events import randomize_gear_type
 
 
+_LEAPP_TRACED_OBSERVATION_INPUTS = "_leapp_traced_observation_inputs"
+_LEAPP_CONSUMED_OBSERVATION_INPUTS = "_leapp_consumed_observation_inputs"
+
+
 def _selected_joint_names(asset, joint_ids) -> list[str] | None:
     """Return joint names selected by the observation config."""
     joint_names = getattr(asset, "joint_names", None)
@@ -50,6 +54,19 @@ def _leapp_real_env(env):
     if _is_leapp_export_env(env):
         return object.__getattribute__(env, "_real_env")
     return env
+
+
+def _set_leapp_traced_observation_input(env, name: str, tensor: torch.Tensor) -> None:
+    """Store a traced observation tensor for later export-only reuse."""
+    if not _is_leapp_export_env(env):
+        return
+    real_env = _leapp_real_env(env)
+    traced_inputs = getattr(real_env, _LEAPP_TRACED_OBSERVATION_INPUTS, None)
+    if traced_inputs is None:
+        traced_inputs = {}
+        setattr(real_env, _LEAPP_TRACED_OBSERVATION_INPUTS, traced_inputs)
+    traced_inputs[name] = tensor
+    getattr(real_env, _LEAPP_CONSUMED_OBSERVATION_INPUTS, set()).discard(name)
 
 
 # These wrappers intentionally shadow the generic Isaac Lab joint observations
@@ -77,6 +94,7 @@ def joint_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg
                 extra={"isaaclab_connection": f"state:{asset_cfg.name}:joint_pos"},
             ),
         )
+        _set_leapp_traced_observation_input(env, f"{asset_cfg.name}_joint_pos", selected_joint_pos)
     return selected_joint_pos
 
 
