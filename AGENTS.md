@@ -159,6 +159,7 @@ Follow conventional commit message practices.
 
 - Network access (e.g., `git push`) is blocked by the sandbox. Use `dangerouslyDisableSandbox: true` so the user gets an approval prompt — don't ask them to run it manually.
 - **Never push to `origin` (`isaac-sim/IsaacLab`).** The `origin` remote is the public upstream repository. Push to your own fork remote (e.g., `antoine`, `alex`) or to the remote of the PR you are working on. If the correct remote is unclear, ask the user before pushing.
+- **Never run `osmo workflow submit`.** The user may ask for workflow edits or the exact submit command, but submissions to the GPU cluster must be run by the user.
 
 ## GitHub Actions and CI/CD
 

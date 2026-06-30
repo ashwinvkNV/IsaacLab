@@ -44,3 +44,16 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:Rizon4sGearAssemblyRNNPPORunnerCfg",
     },
 )
+
+# Flexiv Rizon 4s - ROS Inference with final PhysX SysID params and command shaping
+gym.register(
+    id="Isaac-Deploy-GearAssembly-Rizon4s-Grav-ROS-Inference-SysIDPhysX-Shaped-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": (
+            f"{__name__}.sysid_physx_env_cfg:Rizon4sGearAssemblyROSInferenceSysIDPhysXShapedEnvCfg"
+        ),
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:Rizon4sGearAssemblyRNNPPORunnerCfg",
+    },
+)
