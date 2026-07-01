@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 __all__ = [
+    "DeployRelativeJointPositionActionCfg",
     "randomize_gear_type",
     "randomize_gears_and_base_pose",
     "set_robot_to_grasp_pose",
@@ -13,6 +14,8 @@ __all__ = [
     "gear_quat_w",
     "gear_shaft_pos_w",
     "gear_shaft_quat_w",
+    "joint_pos",
+    "joint_vel",
     "keypoint_command_error",
     "keypoint_command_error_exp",
     "keypoint_entity_error",
@@ -29,6 +32,7 @@ __all__ = [
     "FlexivDynamicsAwareRelativeJointPositionActionCfg",
 ]
 
+from .actions_cfg import DeployRelativeJointPositionActionCfg
 from .delayed_joint_actions import (
     DelayedRelativeJointPositionAction,
     DelayedRelativeJointPositionActionCfg,
@@ -39,7 +43,7 @@ from .delayed_joint_actions import (
 )
 from .events import randomize_gear_type, randomize_gears_and_base_pose, set_robot_to_grasp_pose
 from .noise_models import ResetSampledConstantNoiseModel, ResetSampledConstantNoiseModelCfg
-from .observations import gear_pos_w, gear_quat_w, gear_shaft_pos_w, gear_shaft_quat_w
+from .observations import gear_pos_w, gear_quat_w, gear_shaft_pos_w, gear_shaft_quat_w, joint_pos, joint_vel
 from .rewards import (
     keypoint_command_error,
     keypoint_command_error_exp,
