@@ -159,7 +159,10 @@ Follow conventional commit message practices.
 
 - Network access (e.g., `git push`) is blocked by the sandbox. Use `dangerouslyDisableSandbox: true` so the user gets an approval prompt — don't ask them to run it manually.
 - **Never push to `origin` (`isaac-sim/IsaacLab`).** The `origin` remote is the public upstream repository. Push to your own fork remote (e.g., `antoine`, `alex`) or to the remote of the PR you are working on. If the correct remote is unclear, ask the user before pushing.
-- **Never run `osmo workflow submit`.** The user may ask for workflow edits or the exact submit command, but submissions to the GPU cluster must be run by the user.
+- **Never run `osmo workflow submit` or any other `osmo ... submit` command.** The user may ask for workflow edits or the exact submit command, but submissions to the GPU cluster must be run by the user.
+- **Always include the workflow-directory `cd` command when giving the user an `osmo workflow submit` command.** The user should be able to paste the whole snippet from a known directory.
+- **Use OSMO status, event, and log commands sparingly.** Do not poll or spam OSMO servers. Prefer a small number of targeted `osmo workflow query`, `osmo workflow events`, or `osmo workflow logs` checks with sensible delays, and stop once the workflow state is clear.
+- **For frequent "what is running?" OSMO requests**, list running workflows with `osmo workflow list --status RUNNING --count 50 --order desc --format-type text`. To explain what each workflow contains, inspect `osmo workflow spec <workflow_id>` and summarize the checked-out commit, task/environment name, log/checkpoint path and URL, image, `num_envs`, `max_iterations`, and notable env vars such as `OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, and `MKL_NUM_THREADS`. If the rendered spec truncates, state the partial evidence and use at most one narrow follow-up (`osmo workflow spec --template <workflow_id>` or a bounded log read).
 
 ## GitHub Actions and CI/CD
 
