@@ -15,6 +15,11 @@ import torch
 import isaaclab.utils.math as math_utils
 from isaaclab.managers import ManagerTermBase, SceneEntityCfg, TerminationTermCfg
 
+from isaaclab_tasks.contrib.deploy.mdp.grasp_pose_utils import (
+    build_gear_grasp_offsets,
+    build_gear_grasp_rot_offsets,
+)
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -49,10 +54,10 @@ class reset_when_gear_dropped(ManagerTermBase):
                 "'end_effector_body_name' parameter is required in reset_when_gear_dropped configuration. "
                 "Example: 'wrist_3_link'"
             )
-        if "grasp_rot_offset" not in cfg.params:
+        if "grasp_rot_offset" not in cfg.params and "gear_rot_offsets_grasp" not in cfg.params:
             raise ValueError(
-                "'grasp_rot_offset' parameter is required in reset_when_gear_dropped configuration. "
-                "It should be a quaternion [x, y, z, w]. Example: [0.707, 0.707, 0.0, 0.0]"
+                "'grasp_rot_offset' or 'gear_rot_offsets_grasp' parameter is required in "
+                "reset_when_gear_dropped configuration."
             )
 
         self.end_effector_body_name = cfg.params["end_effector_body_name"]
@@ -63,40 +68,8 @@ class reset_when_gear_dropped(ManagerTermBase):
                 "'gear_offsets_grasp' parameter is required in reset_when_gear_dropped configuration. "
                 "It should be a dict with keys 'gear_small', 'gear_medium', 'gear_large' mapping to [x, y, z] offsets."
             )
-        gear_offsets_grasp = cfg.params["gear_offsets_grasp"]
-        if not isinstance(gear_offsets_grasp, dict):
-            raise TypeError(
-                f"'gear_offsets_grasp' parameter must be a dict, got {type(gear_offsets_grasp).__name__}. "
-                "It should have keys 'gear_small', 'gear_medium', 'gear_large' mapping to [x, y, z] offsets."
-            )
-
-        self.gear_grasp_offset_tensors = {}
-        for gear_type in ["gear_small", "gear_medium", "gear_large"]:
-            if gear_type not in gear_offsets_grasp:
-                raise ValueError(
-                    f"'{gear_type}' offset is required in 'gear_offsets_grasp' parameter. "
-                    f"Found keys: {list(gear_offsets_grasp.keys())}"
-                )
-            self.gear_grasp_offset_tensors[gear_type] = torch.tensor(
-                gear_offsets_grasp[gear_type], device=env.device, dtype=torch.float32
-            )
-
-        # Stack grasp offset tensors for vectorized indexing (shape: 3, 3)
-        # Index 0=small, 1=medium, 2=large
-        self.gear_grasp_offsets_stacked = torch.stack(
-            [
-                self.gear_grasp_offset_tensors["gear_small"],
-                self.gear_grasp_offset_tensors["gear_medium"],
-                self.gear_grasp_offset_tensors["gear_large"],
-            ],
-            dim=0,
-        )
-
-        # Pre-cache grasp rotation offset tensor
-        grasp_rot_offset = cfg.params["grasp_rot_offset"]
-        self.grasp_rot_offset_tensor = (
-            torch.tensor(grasp_rot_offset, device=env.device, dtype=torch.float32).unsqueeze(0).repeat(env.num_envs, 1)
-        )
+        self.gear_grasp_offsets_stacked = build_gear_grasp_offsets(cfg.params["gear_offsets_grasp"], env.device)
+        self.gear_grasp_rot_offsets_stacked = build_gear_grasp_rot_offsets(cfg.params, env.device)
 
         # Pre-allocate buffers
         self.gear_type_map = {"gear_small": 0, "gear_medium": 1, "gear_large": 2}
@@ -130,6 +103,7 @@ class reset_when_gear_dropped(ManagerTermBase):
         distance_threshold: float = 0.1,
         robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
         gear_offsets_grasp: dict | None = None,
+        gear_rot_offsets_grasp: dict | None = None,
         end_effector_body_name: str | None = None,
         grasp_rot_offset: list | None = None,
     ) -> torch.Tensor:
@@ -175,9 +149,10 @@ class reset_when_gear_dropped(ManagerTermBase):
         # Select gear data using advanced indexing
         gear_pos_world = self.all_gear_pos_buffer[self.env_indices, self.gear_type_indices]
         gear_quat_world = self.all_gear_quat_buffer[self.env_indices, self.gear_type_indices]
+        grasp_rot_offsets = self.gear_grasp_rot_offsets_stacked[self.gear_type_indices]
 
         # Apply rotation offset
-        gear_quat_world = math_utils.quat_mul(gear_quat_world, self.grasp_rot_offset_tensor)
+        gear_quat_world = math_utils.quat_mul(gear_quat_world, grasp_rot_offsets)
 
         # Get grasp offsets (vectorized)
         self.gear_grasp_offsets_buffer = self.gear_grasp_offsets_stacked[self.gear_type_indices]
@@ -219,19 +194,15 @@ class reset_when_gear_orientation_exceeds_threshold(ManagerTermBase):
                 "'end_effector_body_name' parameter is required in reset_when_gear_orientation_exceeds_threshold"
                 " configuration. Example: 'wrist_3_link'"
             )
-        if "grasp_rot_offset" not in cfg.params:
+        if "grasp_rot_offset" not in cfg.params and "gear_rot_offsets_grasp" not in cfg.params:
             raise ValueError(
-                "'grasp_rot_offset' parameter is required in reset_when_gear_orientation_exceeds_threshold"
-                " configuration. It should be a quaternion [x, y, z, w]. Example: [0.707, 0.707, 0.0, 0.0]"
+                "'grasp_rot_offset' or 'gear_rot_offsets_grasp' parameter is required in "
+                "reset_when_gear_orientation_exceeds_threshold configuration."
             )
 
         self.end_effector_body_name = cfg.params["end_effector_body_name"]
 
-        # Pre-cache grasp rotation offset tensor
-        grasp_rot_offset = cfg.params["grasp_rot_offset"]
-        self.grasp_rot_offset_tensor = (
-            torch.tensor(grasp_rot_offset, device=env.device, dtype=torch.float32).unsqueeze(0).repeat(env.num_envs, 1)
-        )
+        self.gear_grasp_rot_offsets_stacked = build_gear_grasp_rot_offsets(cfg.params, env.device)
 
         # Pre-allocate buffers
         self.gear_type_map = {"gear_small": 0, "gear_medium": 1, "gear_large": 2}
@@ -266,6 +237,7 @@ class reset_when_gear_orientation_exceeds_threshold(ManagerTermBase):
         robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
         end_effector_body_name: str | None = None,
         grasp_rot_offset: list | None = None,
+        gear_rot_offsets_grasp: dict | None = None,
     ) -> torch.Tensor:
         """Check if gear orientation exceeds thresholds and return reset flags.
 
@@ -311,9 +283,10 @@ class reset_when_gear_orientation_exceeds_threshold(ManagerTermBase):
 
         # Select gear data using advanced indexing
         gear_quat_world = self.all_gear_quat_buffer[self.env_indices, self.gear_type_indices]
+        grasp_rot_offsets = self.gear_grasp_rot_offsets_stacked[self.gear_type_indices]
 
         # Apply rotation offset
-        gear_quat_world = math_utils.quat_mul(gear_quat_world, self.grasp_rot_offset_tensor)
+        gear_quat_world = math_utils.quat_mul(gear_quat_world, grasp_rot_offsets)
 
         # Compute relative orientation: q_rel = q_gear * q_eef^-1
         eef_quat_inv = math_utils.quat_conjugate(eef_quat_world)

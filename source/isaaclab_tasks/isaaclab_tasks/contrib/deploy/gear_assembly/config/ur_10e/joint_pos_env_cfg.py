@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import math
+from pathlib import Path
 
 import torch
 
@@ -17,11 +18,19 @@ from isaaclab.utils.configclass import configclass
 import isaaclab_tasks.contrib.deploy.mdp as mdp
 import isaaclab_tasks.contrib.deploy.mdp.events as gear_assembly_events
 from isaaclab_tasks.contrib.deploy.gear_assembly.gear_assembly_env_cfg import GearAssemblyEnvCfg
+from isaaclab_tasks.contrib.deploy.gear_assembly.grasp_poses import (
+    load_gear_grasp_pose_config,
+    resolve_grasp_pose_file,
+)
 
 ##
 # Pre-defined configs
 ##
 from isaaclab_assets.robots.universal_robots import UR10e_ROBOTIQ_GRIPPER_CFG, UR10e_ROBOTIQ_2F_85_CFG  # isort: skip
+
+CONFIG_DIR = Path(__file__).resolve().parent
+GRASP_POSE_2F140_ENV_VAR = "ISAACLAB_UR10E_2F140_GRASP_POSE_FILE"
+GRASP_POSE_2F85_ENV_VAR = "ISAACLAB_UR10E_2F85_GRASP_POSE_FILE"
 
 
 ##
@@ -245,12 +254,13 @@ class UR10eGearAssemblyEnvCfg(GearAssemblyEnvCfg):
         # Robot-specific parameters (can be overridden for other robots)
         self.end_effector_body_name = "wrist_3_link"  # End effector body name for IK and termination checks
         self.num_arm_joints = 6  # Number of arm joints (excluding gripper)
+        # Legacy rotation offset for external configs that do not provide per-gear GraspGenX rotations.
         self.grasp_rot_offset = [
             math.sqrt(2) / 2,
             math.sqrt(2) / 2,
             0.0,
             0.0,
-        ]  # Rotation offset for grasp pose (quaternion [x, y, z, w])
+        ]
         self.gripper_joint_setter_func = None  # Gripper-specific joint setter function (set in subclass)
 
         # Gear orientation termination thresholds (in degrees)
@@ -367,12 +377,15 @@ class UR10e2F140GearAssemblyEnvCfg(UR10eGearAssemblyEnvCfg):
         # Set gripper-specific joint setter function
         self.gripper_joint_setter_func = set_finger_joint_pos_robotiq_2f140
 
-        # gear offsets and grasp positions for the 2F-140 gripper
-        self.gear_offsets_grasp = {
-            "gear_small": [0.0, self.gear_offsets["gear_small"][0], -0.26],
-            "gear_medium": [0.0, self.gear_offsets["gear_medium"][0], -0.26],
-            "gear_large": [0.0, self.gear_offsets["gear_large"][0], -0.26],
-        }
+        # GraspGenX-generated gear grasp poses for the 2F-140 gripper.
+        grasp_pose = load_gear_grasp_pose_config(
+            resolve_grasp_pose_file(
+                CONFIG_DIR / "graspgenx_robotiq_2f_140_grasp_poses.json",
+                GRASP_POSE_2F140_ENV_VAR,
+            )
+        )
+        self.gear_offsets_grasp = grasp_pose["gear_offsets_grasp"]
+        self.gear_rot_offsets_grasp = grasp_pose["gear_rot_offsets_grasp"]
 
         # Grasp widths for 2F-140 gripper
         self.hand_grasp_width = {"gear_small": 0.64, "gear_medium": 0.54, "gear_large": 0.51}
@@ -382,18 +395,18 @@ class UR10e2F140GearAssemblyEnvCfg(UR10eGearAssemblyEnvCfg):
 
         # Populate event term parameters
         self.events.set_robot_to_grasp_pose.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.events.set_robot_to_grasp_pose.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
         self.events.set_robot_to_grasp_pose.params["end_effector_body_name"] = self.end_effector_body_name
         self.events.set_robot_to_grasp_pose.params["num_arm_joints"] = self.num_arm_joints
-        self.events.set_robot_to_grasp_pose.params["grasp_rot_offset"] = self.grasp_rot_offset
         self.events.set_robot_to_grasp_pose.params["gripper_joint_setter_func"] = self.gripper_joint_setter_func
 
         # Populate termination term parameters
         self.terminations.gear_dropped.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.terminations.gear_dropped.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
         self.terminations.gear_dropped.params["end_effector_body_name"] = self.end_effector_body_name
-        self.terminations.gear_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
 
         self.terminations.gear_orientation_exceeded.params["end_effector_body_name"] = self.end_effector_body_name
-        self.terminations.gear_orientation_exceeded.params["grasp_rot_offset"] = self.grasp_rot_offset
+        self.terminations.gear_orientation_exceeded.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
 
 
 @configclass
@@ -465,12 +478,15 @@ class UR10e2F85GearAssemblyEnvCfg(UR10eGearAssemblyEnvCfg):
         # Set gripper-specific joint setter function
         self.gripper_joint_setter_func = set_finger_joint_pos_robotiq_2f85
 
-        # gear offsets and grasp positions for the 2F-85 gripper
-        self.gear_offsets_grasp = {
-            "gear_small": [0.0, self.gear_offsets["gear_small"][0], -0.19],
-            "gear_medium": [0.0, self.gear_offsets["gear_medium"][0], -0.19],
-            "gear_large": [0.0, self.gear_offsets["gear_large"][0], -0.19],
-        }
+        # GraspGenX-generated gear grasp poses for the 2F-85 gripper.
+        grasp_pose = load_gear_grasp_pose_config(
+            resolve_grasp_pose_file(
+                CONFIG_DIR / "graspgenx_robotiq_2f_85_grasp_poses.json",
+                GRASP_POSE_2F85_ENV_VAR,
+            )
+        )
+        self.gear_offsets_grasp = grasp_pose["gear_offsets_grasp"]
+        self.gear_rot_offsets_grasp = grasp_pose["gear_rot_offsets_grasp"]
 
         # Grasp widths for 2F-85 gripper
         self.hand_grasp_width = {"gear_small": 0.64, "gear_medium": 0.46, "gear_large": 0.4}
@@ -480,18 +496,18 @@ class UR10e2F85GearAssemblyEnvCfg(UR10eGearAssemblyEnvCfg):
 
         # Populate event term parameters
         self.events.set_robot_to_grasp_pose.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.events.set_robot_to_grasp_pose.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
         self.events.set_robot_to_grasp_pose.params["end_effector_body_name"] = self.end_effector_body_name
         self.events.set_robot_to_grasp_pose.params["num_arm_joints"] = self.num_arm_joints
-        self.events.set_robot_to_grasp_pose.params["grasp_rot_offset"] = self.grasp_rot_offset
         self.events.set_robot_to_grasp_pose.params["gripper_joint_setter_func"] = self.gripper_joint_setter_func
 
         # Populate termination term parameters
         self.terminations.gear_dropped.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.terminations.gear_dropped.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
         self.terminations.gear_dropped.params["end_effector_body_name"] = self.end_effector_body_name
-        self.terminations.gear_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
 
         self.terminations.gear_orientation_exceeded.params["end_effector_body_name"] = self.end_effector_body_name
-        self.terminations.gear_orientation_exceeded.params["grasp_rot_offset"] = self.grasp_rot_offset
+        self.terminations.gear_orientation_exceeded.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
 
 
 @configclass

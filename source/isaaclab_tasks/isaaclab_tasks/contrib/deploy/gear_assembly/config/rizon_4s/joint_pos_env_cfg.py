@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import math
+from pathlib import Path
 
 import torch
 
@@ -19,6 +20,10 @@ from isaaclab.utils.noise import UniformNoiseCfg
 import isaaclab_tasks.contrib.deploy.mdp as mdp
 import isaaclab_tasks.contrib.deploy.mdp.events as gear_assembly_events
 from isaaclab_tasks.contrib.deploy.gear_assembly.gear_assembly_env_cfg import GearAssemblyEnvCfg
+from isaaclab_tasks.contrib.deploy.gear_assembly.grasp_poses import (
+    load_gear_grasp_pose_config,
+    resolve_grasp_pose_file,
+)
 from isaaclab_tasks.contrib.deploy.mdp.noise_models import (
     ResetSampledConstantNoiseModelCfg,
     ResetSampledQuaternionNoiseModelCfg,
@@ -28,6 +33,9 @@ from isaaclab_tasks.contrib.deploy.mdp.noise_models import (
 # Pre-defined configs
 ##
 from isaaclab_assets import FLEXIV_RIZON4S_GRAV_GRIPPER_CFG  # isort: skip
+
+CONFIG_DIR = Path(__file__).resolve().parent
+GRASP_POSE_ENV_VAR = "ISAACLAB_RIZON4S_GRAV_GRASP_POSE_FILE"
 
 
 ##
@@ -210,8 +218,7 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
         # Robot-specific parameters for Flexiv Rizon 4s with Grav gripper
         self.end_effector_body_name = "link7"  # End effector body name for IK
         self.num_arm_joints = 7  # Number of arm joints (Rizon 4s has 7 DOF)
-        # Rotation offset for grasp pose (quaternion [x, y, z, w])
-        # Computed from IK convergence for downward-facing end effector
+        # Legacy rotation offset for external configs that do not provide per-gear GraspGenX rotations.
         self.grasp_rot_offset = [
             -0.707,
             0.707,
@@ -354,14 +361,11 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
             rot=(0.0, 0.0, 0.70711, -0.70711),
         )
 
-        # Gear offsets and grasp positions for Rizon 4s with Grav gripper
-        # These offsets are relative to the end effector frame (link7)
-        # Z offset accounts for the gripper length from link7 to finger tip
-        self.gear_offsets_grasp = {
-            "gear_small": [0.0, -self.gear_offsets["gear_small"][0], -0.35],
-            "gear_medium": [0.0, -self.gear_offsets["gear_medium"][0], -0.35],
-            "gear_large": [0.0, -self.gear_offsets["gear_large"][0], -0.35],
-        }
+        grasp_pose = load_gear_grasp_pose_config(
+            resolve_grasp_pose_file(CONFIG_DIR / "graspgenx_grav_grasp_poses.json", GRASP_POSE_ENV_VAR)
+        )
+        self.gear_offsets_grasp = grasp_pose["gear_offsets_grasp"]
+        self.gear_rot_offsets_grasp = grasp_pose["gear_rot_offsets_grasp"]
 
         # Grasp widths for Grav gripper (raw radian values for finger_joint)
         self.hand_grasp_width = {
@@ -379,9 +383,9 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
 
         # Populate event term parameters
         self.events.set_robot_to_grasp_pose.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.events.set_robot_to_grasp_pose.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
         self.events.set_robot_to_grasp_pose.params["end_effector_body_name"] = self.end_effector_body_name
         self.events.set_robot_to_grasp_pose.params["num_arm_joints"] = self.num_arm_joints
-        self.events.set_robot_to_grasp_pose.params["grasp_rot_offset"] = self.grasp_rot_offset
         self.events.set_robot_to_grasp_pose.params["gripper_joint_setter_func"] = self.gripper_joint_setter_func
 
         # Flexiv-specific reward terms for EE-grasp keypoint tracking
@@ -395,8 +399,8 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
                 "weight_ramp_start": 0.0,
                 "weight_ramp_steps": self.ee_grasp_weight_ramp_steps,
                 "end_effector_body_name": self.end_effector_body_name,
-                "grasp_rot_offset": self.grasp_rot_offset,
                 "gear_offsets_grasp": self.gear_offsets_grasp,
+                "gear_rot_offsets_grasp": self.gear_rot_offsets_grasp,
             },
         )
         self.rewards.end_effector_grasp_keypoint_tracking_exp = RewTerm(
@@ -411,15 +415,15 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
                 "weight_ramp_start": 0.0,
                 "weight_ramp_steps": self.ee_grasp_weight_ramp_steps,
                 "end_effector_body_name": self.end_effector_body_name,
-                "grasp_rot_offset": self.grasp_rot_offset,
                 "gear_offsets_grasp": self.gear_offsets_grasp,
+                "gear_rot_offsets_grasp": self.gear_rot_offsets_grasp,
             },
         )
 
         # Populate termination term parameters
         self.terminations.gear_dropped.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.terminations.gear_dropped.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp
         self.terminations.gear_dropped.params["end_effector_body_name"] = self.end_effector_body_name
-        self.terminations.gear_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
 
         self.terminations.gear_orientation_exceeded.params["end_effector_body_name"] = self.end_effector_body_name
-        self.terminations.gear_orientation_exceeded.params["grasp_rot_offset"] = self.grasp_rot_offset
+        self.terminations.gear_orientation_exceeded.params["gear_rot_offsets_grasp"] = self.gear_rot_offsets_grasp

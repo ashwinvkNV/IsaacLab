@@ -1,0 +1,203 @@
+{
+  "format": "isaaclab_gear_grasp_pose",
+  "format_version": 1,
+  "source": "NVlabs/GraspGenX",
+  "gripper_name": "robotiq_2f_85",
+  "object_meshes": {
+    "gear_small": "factory_gear_small.usd",
+    "gear_medium": "factory_gear_medium.usd",
+    "gear_large": "factory_gear_large.usd"
+  },
+  "selection": {
+    "rank": "task_frame",
+    "planner": "graspmoe",
+    "num_grasps": 1200,
+    "topk_num_grasps": -1,
+    "num_sample_points": 5000,
+    "grasp_threshold": -1.0,
+    "seed": 19,
+    "mesh_scale": 1.0,
+    "per_gear": {
+      "gear_small": {
+        "rank": "task_frame",
+        "branch": "obb",
+        "target_offset": [
+          -0.0,
+          0.076125001,
+          -0.19
+        ],
+        "score": 0.04854861,
+        "xy_error_m": 0.00010058,
+        "z_error_m": 0.000985877,
+        "rotation_error_deg": 0.01954,
+        "candidate_index": 17117,
+        "num_candidates": 144100,
+        "mesh_centroid": [
+          0.076125001,
+          -0.0,
+          0.02301151
+        ]
+      },
+      "gear_medium": {
+        "rank": "task_frame",
+        "branch": "obb",
+        "target_offset": [
+          0.0,
+          0.030374995,
+          -0.19
+        ],
+        "score": 0.097157081,
+        "xy_error_m": 0.000552941,
+        "z_error_m": 0.001083029,
+        "rotation_error_deg": 0.456526,
+        "candidate_index": 33557,
+        "num_candidates": 316900,
+        "mesh_centroid": [
+          0.030374995,
+          0.0,
+          0.022124399
+        ]
+      },
+      "gear_large": {
+        "rank": "task_frame",
+        "branch": "obb",
+        "target_offset": [
+          0.0,
+          -0.045375001,
+          -0.19
+        ],
+        "score": 0.167505497,
+        "xy_error_m": 0.001160733,
+        "z_error_m": 0.001043448,
+        "rotation_error_deg": 1.321816,
+        "candidate_index": 50657,
+        "num_candidates": 483940,
+        "mesh_centroid": [
+          -0.045375001,
+          0.0,
+          0.020182266
+        ]
+      }
+    },
+    "graspmoe": {
+      "moe_num_yaws": 144,
+      "moe_z_offsets_cm": [
+        -16.0,
+        -15.0,
+        -14.0,
+        -13.0,
+        -12.0,
+        -11.0,
+        -10.0,
+        -9.0,
+        -8.0,
+        -7.0,
+        -6.0,
+        -5.0,
+        -4.0,
+        -3.0,
+        -2.0,
+        -1.0,
+        0.0,
+        1.0,
+        2.0,
+        3.0
+      ],
+      "moe_outlier_threshold": 0.014,
+      "moe_outlier_k": 20,
+      "moe_obb_mode": "advanced",
+      "moe_skip_obb_rule": "never",
+      "moe_obb_density": "dense-topandside",
+      "moe_obb_position_spacing_cm": 0.25
+    },
+    "task_frame": {
+      "task_grasp_offset_z": -0.19,
+      "task_grasp_quat_xyzw": [
+        0.707106781,
+        0.707106781,
+        0.0,
+        0.0
+      ],
+      "task_xy_weight": 45.0,
+      "task_z_weight": 45.0,
+      "task_rot_weight": 3.0,
+      "task_confidence_weight": 0.005
+    }
+  },
+  "confidence": {
+    "gear_small": 0.273008913,
+    "gear_medium": 0.073036388,
+    "gear_large": 0.178546473
+  },
+  "gear_offsets_grasp": {
+    "gear_small": [
+      -7.3991e-05,
+      0.076056871,
+      -0.190985877
+    ],
+    "gear_medium": [
+      6.79e-07,
+      0.030927935,
+      -0.191083029
+    ],
+    "gear_large": [
+      -0.000596972,
+      -0.04437955,
+      -0.191043448
+    ]
+  },
+  "gear_rot_offsets_grasp": {
+    "gear_small": [
+      0.706986198,
+      0.707227344,
+      0.0,
+      0.0
+    ],
+    "gear_medium": [
+      0.704284107,
+      0.709918232,
+      0.0,
+      0.0
+    ],
+    "gear_large": [
+      0.715216048,
+      0.69890343,
+      0.0,
+      0.0
+    ]
+  },
+  "pose_object_frame_quat_wxyz": {
+    "gear_small": [
+      0.0,
+      0.706986198,
+      0.707227344,
+      0.0
+    ],
+    "gear_medium": [
+      0.0,
+      0.704284107,
+      0.709918232,
+      0.0
+    ],
+    "gear_large": [
+      0.0,
+      0.715216048,
+      0.69890343,
+      0.0
+    ]
+  },
+  "ee_from_grasp": {
+    "pos": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "quat_xyzw": [
+      0.0,
+      0.0,
+      0.707106781,
+      0.707106781
+    ]
+  },
+  "notes": "GraspMoE on the 1.5x gear scene meshes, calibrated to the UR10e wrist_3_link task frame."
+}

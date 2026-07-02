@@ -14,6 +14,11 @@ import torch
 from isaaclab.managers import ManagerTermBase, RewardTermCfg, SceneEntityCfg
 from isaaclab.utils.math import combine_frame_transforms, quat_apply, quat_mul
 
+from isaaclab_tasks.contrib.deploy.mdp.grasp_pose_utils import (
+    build_gear_grasp_offsets,
+    build_gear_grasp_rot_offsets,
+)
+
 if TYPE_CHECKING:
     from isaaclab.assets import Articulation
     from isaaclab.envs import ManagerBasedRLEnv
@@ -374,20 +379,8 @@ class keypoint_ee_grasp_error(keypoint_entity_error):
         self.robot_asset: Articulation = env.scene[self.robot_asset_cfg.name]
 
         self.end_effector_body_name: str = cfg.params["end_effector_body_name"]
-        grasp_rot_offset = cfg.params["grasp_rot_offset"]
-        self.grasp_rot_offset_tensor = (
-            torch.tensor(grasp_rot_offset, device=env.device, dtype=torch.float32).unsqueeze(0).repeat(env.num_envs, 1)
-        )
-
-        gear_offsets_grasp = cfg.params["gear_offsets_grasp"]
-        self.gear_grasp_offsets_stacked = torch.stack(
-            [
-                torch.tensor(gear_offsets_grasp["gear_small"], device=env.device, dtype=torch.float32),
-                torch.tensor(gear_offsets_grasp["gear_medium"], device=env.device, dtype=torch.float32),
-                torch.tensor(gear_offsets_grasp["gear_large"], device=env.device, dtype=torch.float32),
-            ],
-            dim=0,
-        )
+        self.gear_grasp_offsets_stacked = build_gear_grasp_offsets(cfg.params["gear_offsets_grasp"], env.device)
+        self.gear_grasp_rot_offsets_stacked = build_gear_grasp_rot_offsets(cfg.params, env.device)
 
         self.weight_ramp_start: float = cfg.params.get("weight_ramp_start", 0.0)
         self.weight_ramp_steps: int = cfg.params.get("weight_ramp_steps", 1)
@@ -414,7 +407,8 @@ class keypoint_ee_grasp_error(keypoint_entity_error):
 
         gear_pos, gear_quat = self._get_selected_gear_poses(env)
 
-        gear_quat_grasp = quat_mul(gear_quat, self.grasp_rot_offset_tensor)
+        grasp_rot_offsets = self.gear_grasp_rot_offsets_stacked[self.gear_type_indices]
+        gear_quat_grasp = quat_mul(gear_quat, grasp_rot_offsets)
         grasp_offsets = self.gear_grasp_offsets_stacked[self.gear_type_indices]
         gear_grasp_pos = gear_pos + quat_apply(gear_quat_grasp, grasp_offsets)
 
@@ -426,6 +420,7 @@ class keypoint_ee_grasp_error(keypoint_entity_error):
         robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
         end_effector_body_name: str = "",
         grasp_rot_offset: list | None = None,
+        gear_rot_offsets_grasp: dict | None = None,
         gear_offsets_grasp: dict | None = None,
         keypoint_scale: float = 1.0,
         add_cube_center_kp: bool = True,
@@ -499,6 +494,7 @@ class keypoint_ee_grasp_error_exp(keypoint_ee_grasp_error):
         robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
         end_effector_body_name: str = "",
         grasp_rot_offset: list | None = None,
+        gear_rot_offsets_grasp: dict | None = None,
         gear_offsets_grasp: dict | None = None,
         kp_exp_coeffs: list[tuple[float, float]] = [(1.0, 0.1)],
         kp_use_sum_of_exps: bool = True,

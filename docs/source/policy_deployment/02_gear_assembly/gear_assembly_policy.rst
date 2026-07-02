@@ -557,6 +557,116 @@ Randomizing the robot's initial configuration helps the policy handle different 
                 },
             )
 
+GraspGenX Grasp Pose Generation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The gear assembly reset, grasp reward, and grasp-frame termination terms use per-gear grasp poses generated with
+`NVlabs/GraspGenX <https://github.com/NVlabs/GraspGenX>`_ instead of hard-coded offsets in the task config. The
+generated artifact stores:
+
+- ``gear_offsets_grasp``: the gear-to-gripper translation in the rotated gripper frame
+- ``gear_rot_offsets_grasp``: the gear-to-gripper rotation as an Isaac Lab ``xyzw`` quaternion
+- GraspGenX confidence scores and mesh/gripper metadata for traceability
+
+Isaac Lab does not import GraspGenX at runtime. Generate the JSON artifact in a separate GraspGenX ``uv`` environment,
+then commit or reference the artifact from Isaac Lab. Use the same 1.5x gear USDs that the task scene uses; older 1.0x
+copies have different mesh centroids and produce unstable grasp offsets.
+
+.. code-block:: bash
+
+    git clone https://github.com/NVlabs/GraspGenX.git /path/to/GraspGenX
+    cd /path/to/GraspGenX
+    uv venv --python 3.12 --seed .venv
+    uv sync --python .venv/bin/python
+
+List the released gripper descriptors:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python /path/to/GraspGenX/scripts/list_grippers.py --json
+
+Generate the UR10e Robotiq 2F-140 artifact from the scene gear meshes:
+
+.. code-block:: bash
+
+    cd /path/to/IsaacLab
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_name robotiq_2f_140 \
+        --gear_small_mesh /path/to/1.5x/factory_gear_small.usd \
+        --gear_medium_mesh /path/to/1.5x/factory_gear_medium.usd \
+        --gear_large_mesh /path/to/1.5x/factory_gear_large.usd \
+        --num_sample_points 5000 \
+        --num_grasps 1200 \
+        --topk_num_grasps -1 \
+        --ee_from_grasp_quat_xyzw 0 0 0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw 0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.26 \
+        --output_file source/isaaclab_tasks/isaaclab_tasks/contrib/deploy/gear_assembly/config/ur_10e/graspgenx_robotiq_2f_140_grasp_poses.json
+
+For the Robotiq 2F-85 config, change ``--gripper_name`` and ``--output_file``:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_name robotiq_2f_85 \
+        --gear_small_mesh /path/to/1.5x/factory_gear_small.usd \
+        --gear_medium_mesh /path/to/1.5x/factory_gear_medium.usd \
+        --gear_large_mesh /path/to/1.5x/factory_gear_large.usd \
+        --num_sample_points 5000 \
+        --num_grasps 1200 \
+        --topk_num_grasps -1 \
+        --ee_from_grasp_quat_xyzw 0 0 0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw 0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.19 \
+        --output_file source/isaaclab_tasks/isaaclab_tasks/contrib/deploy/gear_assembly/config/ur_10e/graspgenx_robotiq_2f_85_grasp_poses.json
+
+The released GraspGenX descriptors do not include ``flexiv_grav``. The committed Rizon artifact therefore uses the
+released ``robotiq_2f_85`` descriptor as a two-finger surrogate and records ``target_gripper_name=flexiv_grav`` plus the
+task-frame calibration from the surrogate gripper frame to ``link7``. To create a native Grav descriptor, use the
+GraspGenX wizard and then regenerate with ``--gripper_name flexiv_grav`` and a calibrated ``--ee_from_grasp_*`` transform:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python /path/to/GraspGenX/scripts/gripper_config_wizard.py \
+        --urdf /path/to/flexiv_grav.urdf \
+        --name flexiv_grav \
+        --port 8081
+
+Generate the committed surrogate Grav artifact:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_name robotiq_2f_85 \
+        --target_gripper_name flexiv_grav \
+        --gear_small_mesh /path/to/1.5x/factory_gear_small.usd \
+        --gear_medium_mesh /path/to/1.5x/factory_gear_medium.usd \
+        --gear_large_mesh /path/to/1.5x/factory_gear_large.usd \
+        --num_sample_points 5000 \
+        --num_grasps 1200 \
+        --topk_num_grasps -1 \
+        --ee_from_grasp_pos 0 0 -0.159 \
+        --ee_from_grasp_quat_xyzw 0 0 -0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw -0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.35 \
+        --output_file source/isaaclab_tasks/isaaclab_tasks/contrib/deploy/gear_assembly/config/rizon_4s/graspgenx_grav_grasp_poses.json
+
+The configs resolve committed artifacts by default. To try a newly generated file without editing the config, set one
+of these environment variables before training:
+
+.. code-block:: bash
+
+    export ISAACLAB_UR10E_2F140_GRASP_POSE_FILE=/path/to/graspgenx_robotiq_2f_140_grasp_poses.json
+    export ISAACLAB_UR10E_2F85_GRASP_POSE_FILE=/path/to/graspgenx_robotiq_2f_85_grasp_poses.json
+    export ISAACLAB_RIZON4S_GRAV_GRASP_POSE_FILE=/path/to/graspgenx_grav_grasp_poses.json
+
+The generator defaults to ``--planner graspmoe`` and ``--selection_mode task_frame``. This keeps all GraspMoE candidates,
+uses the mesh centroid for lateral placement, and selects the candidate closest to the task EE depth/orientation while
+retaining GraspGenX confidence as a tie-breaker.
+
 Reward Shaping
 ~~~~~~~~~~~~~~
 
@@ -568,7 +678,11 @@ The gear assembly environment uses keypoint-based rewards that measure the dista
 
 **Rizon 4s additional reward terms:**
 
-The Rizon 4s configuration adds two reward terms that measure the distance between the robot's end effector and the grasp-corrected pose computed from the active gear. For each gear, the code applies ``grasp_rot_offset`` and per-gear-size ``gear_offsets_grasp`` to compute where the EE should be if properly grasping that gear, then measures keypoint distance between the actual EE pose and that target. This acts as a grasp quality metric. These terms are defined only in the Rizon4s config (``joint_pos_env_cfg.py``) so they do not affect UR10e training:
+The Rizon 4s configuration adds two reward terms that measure the distance between the robot's end effector and the
+grasp-corrected pose computed from the active gear. For each gear, the code applies the generated
+``gear_rot_offsets_grasp`` and ``gear_offsets_grasp`` values to compute where the EE should be if properly grasping that
+gear, then measures keypoint distance between the actual EE pose and that target. This acts as a grasp quality metric.
+These terms are defined only in the Rizon4s config (``joint_pos_env_cfg.py``) so they do not affect UR10e training:
 
 .. code-block:: python
 
@@ -583,8 +697,8 @@ The Rizon 4s configuration adds two reward terms that measure the distance betwe
             "weight_ramp_start": 0.0,
             "weight_ramp_steps": 250_000,
             "end_effector_body_name": self.end_effector_body_name,
-            "grasp_rot_offset": self.grasp_rot_offset,
             "gear_offsets_grasp": self.gear_offsets_grasp,
+            "gear_rot_offsets_grasp": self.gear_rot_offsets_grasp,
         },
     )
 
@@ -601,12 +715,17 @@ The Rizon 4s configuration adds two reward terms that measure the distance betwe
             "weight_ramp_start": 0.0,
             "weight_ramp_steps": 250_000,
             "end_effector_body_name": self.end_effector_body_name,
-            "grasp_rot_offset": self.grasp_rot_offset,
             "gear_offsets_grasp": self.gear_offsets_grasp,
+            "gear_rot_offsets_grasp": self.gear_rot_offsets_grasp,
         },
     )
 
-These terms encourage the Rizon 4s policy to keep the gripper properly aligned with the gear during insertion. The distance is ~0 when the EE is correctly grasping the gear, and increases when the gripper drifts away. The ``weight_ramp_steps`` parameter linearly ramps the reward weight from zero over the first 512k environment steps, allowing the policy to first learn coarse approach/insertion behavior before the grasp quality reward becomes active.
+These terms encourage the Rizon 4s policy to keep the gripper properly aligned with the gear during insertion. The
+distance is ~0 when the EE is correctly grasping the gear, and increases when the gripper drifts away. The target grasp
+frame uses the generated ``gear_rot_offsets_grasp`` and ``gear_offsets_grasp`` maps, so each gear size can have its own
+GraspGenX pose. The ``weight_ramp_steps`` parameter linearly ramps the reward weight from zero over the first 512k
+environment steps, allowing the policy to first learn coarse approach/insertion behavior before the grasp quality reward
+becomes active.
 
 .. list-table:: Reward Terms Comparison
    :widths: 40 15 15

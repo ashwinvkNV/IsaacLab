@@ -16,6 +16,10 @@ import isaaclab.utils.math as math_utils
 from isaaclab.managers import EventTermCfg, ManagerTermBase, SceneEntityCfg
 
 from isaaclab_tasks.contrib.automate import factory_control as fc
+from isaaclab_tasks.contrib.deploy.mdp.grasp_pose_utils import (
+    build_gear_grasp_offsets,
+    build_gear_grasp_rot_offsets,
+)
 
 if TYPE_CHECKING:
     from isaaclab.assets import Articulation, RigidObject
@@ -129,10 +133,10 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             raise ValueError(
                 "'num_arm_joints' parameter is required in set_robot_to_grasp_pose configuration. Example: 6 for UR10e"
             )
-        if "grasp_rot_offset" not in cfg.params:
+        if "grasp_rot_offset" not in cfg.params and "gear_rot_offsets_grasp" not in cfg.params:
             raise ValueError(
-                "'grasp_rot_offset' parameter is required in set_robot_to_grasp_pose configuration. "
-                "It should be a quaternion [x, y, z, w]. Example: [0.707, 0.707, 0.0, 0.0]"
+                "'grasp_rot_offset' or 'gear_rot_offsets_grasp' parameter is required in "
+                "set_robot_to_grasp_pose configuration."
             )
         if "gripper_joint_setter_func" not in cfg.params:
             raise ValueError(
@@ -150,40 +154,8 @@ class set_robot_to_grasp_pose(ManagerTermBase):
                 "'gear_offsets_grasp' parameter is required in set_robot_to_grasp_pose configuration. "
                 "It should be a dict with keys 'gear_small', 'gear_medium', 'gear_large' mapping to [x, y, z] offsets."
             )
-        gear_offsets_grasp = cfg.params["gear_offsets_grasp"]
-        if not isinstance(gear_offsets_grasp, dict):
-            raise TypeError(
-                f"'gear_offsets_grasp' parameter must be a dict, got {type(gear_offsets_grasp).__name__}. "
-                "It should have keys 'gear_small', 'gear_medium', 'gear_large' mapping to [x, y, z] offsets."
-            )
-
-        self.gear_grasp_offset_tensors = {}
-        for gear_type in ["gear_small", "gear_medium", "gear_large"]:
-            if gear_type not in gear_offsets_grasp:
-                raise ValueError(
-                    f"'{gear_type}' offset is required in 'gear_offsets_grasp' parameter. "
-                    f"Found keys: {list(gear_offsets_grasp.keys())}"
-                )
-            self.gear_grasp_offset_tensors[gear_type] = torch.tensor(
-                gear_offsets_grasp[gear_type], device=env.device, dtype=torch.float32
-            )
-
-        # Stack grasp offset tensors for vectorized indexing (shape: 3, 3)
-        # Index 0=small, 1=medium, 2=large
-        self.gear_grasp_offsets_stacked = torch.stack(
-            [
-                self.gear_grasp_offset_tensors["gear_small"],
-                self.gear_grasp_offset_tensors["gear_medium"],
-                self.gear_grasp_offset_tensors["gear_large"],
-            ],
-            dim=0,
-        )
-
-        # Pre-cache grasp rotation offset tensor
-        grasp_rot_offset = cfg.params["grasp_rot_offset"]
-        self.grasp_rot_offset_tensor = (
-            torch.tensor(grasp_rot_offset, device=env.device, dtype=torch.float32).unsqueeze(0).repeat(env.num_envs, 1)
-        )
+        self.gear_grasp_offsets_stacked = build_gear_grasp_offsets(cfg.params["gear_offsets_grasp"], env.device)
+        self.gear_grasp_rot_offsets_stacked = build_gear_grasp_rot_offsets(cfg.params, env.device)
 
         # Pre-allocate buffers for batch operations
         self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
@@ -218,6 +190,7 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         max_iterations: int = 50,
         pos_randomization_range: dict | None = None,
         gear_offsets_grasp: dict | None = None,
+        gear_rot_offsets_grasp: dict | None = None,
         end_effector_body_name: str | None = None,
         num_arm_joints: int | None = None,
         grasp_rot_offset: list | None = None,
@@ -248,7 +221,6 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         gear_type_indices = self.gear_type_indices[:num_reset_envs]
         local_env_indices = self.local_env_indices[:num_reset_envs]
         gear_grasp_offsets = self.gear_grasp_offsets_buffer[:num_reset_envs]
-        grasp_rot_offset_tensor = self.grasp_rot_offset_tensor[env_ids]
 
         # IK loop
         for i in range(max_iterations):
@@ -278,13 +250,14 @@ class set_robot_to_grasp_pose(ManagerTermBase):
             # Get gear type indices directly as tensor
             all_gear_type_indices = gear_type_manager.get_all_gear_type_indices()
             gear_type_indices[:] = all_gear_type_indices[env_ids]
+            grasp_rot_offsets = self.gear_grasp_rot_offsets_stacked[gear_type_indices]
 
             # Select gear data using advanced indexing
             grasp_object_pos_world = all_gear_pos[local_env_indices, gear_type_indices]
             grasp_object_quat = all_gear_quat[local_env_indices, gear_type_indices]
 
             # Apply rotation offset
-            grasp_object_quat = math_utils.quat_mul(grasp_object_quat, grasp_rot_offset_tensor)
+            grasp_object_quat = math_utils.quat_mul(grasp_object_quat, grasp_rot_offsets)
 
             # Get grasp offsets (vectorized)
             gear_grasp_offsets[:] = self.gear_grasp_offsets_stacked[gear_type_indices]
