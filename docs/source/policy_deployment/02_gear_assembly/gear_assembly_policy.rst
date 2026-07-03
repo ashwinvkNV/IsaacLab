@@ -557,6 +557,76 @@ Randomizing the robot's initial configuration helps the policy handle different 
                 },
             )
 
+Manual Grasp Pose Generation with GraspGenX
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The gear assembly configs keep the grasp pose values as manually editable Python values. To use
+`NVlabs/GraspGenX <https://github.com/NVlabs/GraspGenX>`_ as an offline helper, run the helper script outside the
+Isaac Lab training environment, inspect the printed ``gear_offsets_grasp`` and ``grasp_rot_offset`` values, then copy
+the values into the robot config if you want to update the manual grasp frame.
+
+GraspGenX is not imported or run during training.
+
+.. code-block:: bash
+
+    git clone https://github.com/NVlabs/GraspGenX.git /path/to/GraspGenX
+    cd /path/to/GraspGenX
+    uv venv --python 3.12 --seed .venv
+    uv sync --python .venv/bin/python
+
+Run the helper from the Isaac Lab checkout with the same 1.5x gear meshes used by the scene. This example prints values
+for the UR10e Robotiq 2F-85 config:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_values_graspgenx.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_name robotiq_2f_85 \
+        --gear_small_mesh /path/to/1.5x/factory_gear_small.usd \
+        --gear_medium_mesh /path/to/1.5x/factory_gear_medium.usd \
+        --gear_large_mesh /path/to/1.5x/factory_gear_large.usd \
+        --task_grasp_quat_xyzw 0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.19
+
+For UR10e Robotiq 2F-140, use ``--gripper_name robotiq_2f_140`` and ``--task_grasp_offset_z -0.26``.
+
+The released GraspGenX descriptors do not include the Flexiv Grav gripper. To estimate Rizon 4s + Grav values with the
+released two-finger descriptor as a surrogate, run:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_values_graspgenx.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_name robotiq_2f_85 \
+        --target_gripper_name flexiv_grav \
+        --gear_small_mesh /path/to/1.5x/factory_gear_small.usd \
+        --gear_medium_mesh /path/to/1.5x/factory_gear_medium.usd \
+        --gear_large_mesh /path/to/1.5x/factory_gear_large.usd \
+        --ee_from_grasp_pos 0 0 -0.159 \
+        --ee_from_grasp_quat_xyzw 0 0 -0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw -0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.35
+
+The helper prints a single ``grasp_rot_offset`` because the current task configs accept one shared grasp rotation, and
+also prints per-gear generated rotations for inspection. The previous manual values were:
+
+.. list-table:: Previous manual grasp values
+   :header-rows: 1
+   :widths: 22 28 28
+
+   * - Config
+     - ``grasp_rot_offset``
+     - ``gear_offsets_grasp``
+   * - UR10e 2F-140
+     - ``[0.707106781, 0.707106781, 0, 0]``
+     - small ``[0, 0.076125, -0.26]``; medium ``[0, 0.030375, -0.26]``; large ``[0, -0.045375, -0.26]``
+   * - UR10e 2F-85
+     - ``[0.707106781, 0.707106781, 0, 0]``
+     - small ``[0, 0.076125, -0.19]``; medium ``[0, 0.030375, -0.19]``; large ``[0, -0.045375, -0.19]``
+   * - Rizon 4s + Grav
+     - ``[-0.707, 0.707, 0, 0]``
+     - small ``[0, -0.076125, -0.35]``; medium ``[0, -0.030375, -0.35]``; large ``[0, 0.045375, -0.35]``
+
 Reward Shaping
 ~~~~~~~~~~~~~~
 
