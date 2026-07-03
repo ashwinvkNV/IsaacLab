@@ -137,7 +137,11 @@ def _load_mesh_points(mesh_file: Path, num_sample_points: int, trimesh: Any, tra
     return centered_xyz, tra.inverse_matrix(transform_subtract_mean)
 
 
-def _matrix_from_pos_quat_xyzw(pos: tuple[float, ...] | list[float], quat_xyzw: tuple[float, ...] | list[float], tra: Any):
+def _matrix_from_pos_quat_xyzw(
+    pos: tuple[float, ...] | list[float],
+    quat_xyzw: tuple[float, ...] | list[float],
+    tra: Any,
+):
     quat = np.asarray(quat_xyzw, dtype=np.float64)
     quat = quat / np.linalg.norm(quat)
     transform = tra.quaternion_matrix([quat[3], quat[0], quat[1], quat[2]])

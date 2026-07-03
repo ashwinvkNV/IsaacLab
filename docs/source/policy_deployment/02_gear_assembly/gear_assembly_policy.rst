@@ -565,9 +565,10 @@ The gear assembly configs keep the grasp pose values as manually editable Python
 GraspGenX gripper descriptor and one object mesh, inspect the printed ``gear_offsets_grasp`` entry and
 ``grasp_rot_offset`` value, then copy the values into the robot config if you want to update the manual grasp frame.
 
-GraspGenX is not imported or run during training. For a custom gripper URDF, first create a GraspGenX descriptor with
-``scripts/gripper_config_wizard.py`` in the GraspGenX checkout, then pass the descriptor name with ``--gripper_name``.
-The object can be a USD or mesh file.
+GraspGenX is not imported or run during training. For a custom gripper, first create a GraspGenX descriptor, then pass
+the descriptor name with ``--gripper_name``. Use ``scripts/gripper_config_wizard.py`` in the GraspGenX checkout for a
+URDF gripper, or use ``scripts/tools/create_graspgenx_gripper_from_usd.py`` from Isaac Lab when the gripper is available
+as an Isaac USD. The object can be a USD or mesh file.
 
 .. code-block:: bash
 
@@ -608,8 +609,64 @@ Run the same command for each gear and change ``--object_mesh``, ``--config_key`
      - small / medium / large
      - ``0 0.076125 -0.19`` / ``0 0.030375 -0.19`` / ``0 -0.045375 -0.19``
 
-The released GraspGenX descriptors do not include the Flexiv Grav gripper. To estimate Rizon 4s + Grav values with the
-released two-finger descriptor as a surrogate, run once per gear with the Rizon target offsets:
+Create a GraspGenX descriptor from a gripper USD
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The USD descriptor helper reads meshes and joint limits from a gripper USD, rotates the geometry into the GraspGenX
+descriptor convention (closing width on +X and approach/depth on +Z), exports ``vis_mesh.obj`` and ``coll_mesh.obj``,
+and writes ``config.json`` under ``assets/x_grippers/<name>/``. A static USD may not be authored in the fully-open
+gripper pose, so pass ``--sweep_volume_extents`` and ``--sweep_volume_offset`` when the auto-estimated fingertip gap is
+too small.
+
+For the standalone Flexiv Grav USD:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/create_graspgenx_gripper_from_usd.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_usd /path/to/flexiv/Grav_gripper.usd \
+        --name flexiv_grav_from_usd \
+        --root_prim /Grav_gripper \
+        --finger_regex finger_tip \
+        --sweep_volume_extents 0.085 0.032 0.038 \
+        --sweep_volume_offset 0 0 0.181 \
+        --sweep_volume_mid_extents 0.047 0.032 0.038 \
+        --sweep_volume_mid_offset 0 0 0.181 \
+        --fingertip 0 0 0.200 \
+        --standoff 0 0.019 \
+        --overwrite
+
+For the full Rizon 4s USD, use the gripper sub-tree as the root prim:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/create_graspgenx_gripper_from_usd.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --gripper_usd /path/to/flexiv/Rizon4s_with_Grav.usd \
+        --name flexiv_grav_from_usd \
+        --root_prim /Rizon4s/Grav_gripper \
+        --finger_regex finger_tip \
+        --sweep_volume_extents 0.085 0.032 0.038 \
+        --sweep_volume_offset 0 0 0.181 \
+        --sweep_volume_mid_extents 0.047 0.032 0.038 \
+        --sweep_volume_mid_offset 0 0 0.181 \
+        --fingertip 0 0 0.200 \
+        --standoff 0 0.019 \
+        --overwrite
+
+Then use the generated descriptor in the grasp-pose helper:
+
+.. code-block:: bash
+
+    /path/to/GraspGenX/.venv/bin/python scripts/tools/generate_grasp_pose_values_graspgenx.py \
+        --graspgenx_root /path/to/GraspGenX \
+        --assets_dir /path/to/GraspGenX/assets \
+        --gripper_name flexiv_grav_from_usd \
+        --object_mesh /path/to/1.5x/factory_gear_small.usd \
+        --config_key gear_small
+
+If you do not create a Flexiv Grav descriptor from USD, you can still estimate Rizon 4s + Grav values with the released
+two-finger descriptor as a surrogate. Run once per gear with the Rizon target offsets:
 
 .. code-block:: bash
 
