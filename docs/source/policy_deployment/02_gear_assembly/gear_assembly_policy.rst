@@ -667,6 +667,103 @@ The generator defaults to ``--planner graspmoe`` and ``--selection_mode task_fra
 uses the mesh centroid for lateral placement, and selects the candidate closest to the task EE depth/orientation while
 retaining GraspGenX confidence as a tie-breaker.
 
+The committed artifacts were generated in the local verification workspace with these exact commands:
+
+.. code-block:: bash
+
+    /tmp/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py \
+        --graspgenx_root /tmp/GraspGenX \
+        --gripper_name robotiq_2f_140 \
+        --gear_small_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_small.usd \
+        --gear_medium_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_medium.usd \
+        --gear_large_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_large.usd \
+        --num_sample_points 5000 \
+        --num_grasps 1200 \
+        --topk_num_grasps -1 \
+        --ee_from_grasp_quat_xyzw 0 0 0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw 0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.26 \
+        --output_file source/isaaclab_tasks/isaaclab_tasks/contrib/deploy/gear_assembly/config/ur_10e/graspgenx_robotiq_2f_140_grasp_poses.json
+
+    /tmp/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py \
+        --graspgenx_root /tmp/GraspGenX \
+        --gripper_name robotiq_2f_85 \
+        --gear_small_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_small.usd \
+        --gear_medium_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_medium.usd \
+        --gear_large_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_large.usd \
+        --num_sample_points 5000 \
+        --num_grasps 1200 \
+        --topk_num_grasps -1 \
+        --ee_from_grasp_quat_xyzw 0 0 0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw 0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.19 \
+        --output_file source/isaaclab_tasks/isaaclab_tasks/contrib/deploy/gear_assembly/config/ur_10e/graspgenx_robotiq_2f_85_grasp_poses.json
+
+    /tmp/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py \
+        --graspgenx_root /tmp/GraspGenX \
+        --gripper_name robotiq_2f_85 \
+        --target_gripper_name flexiv_grav \
+        --gear_small_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_small.usd \
+        --gear_medium_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_medium.usd \
+        --gear_large_mesh /home/ashwin/git_cloned/IsaacLab_UR/assets/Factory/Gears_1.5x_new/factory_gear_large.usd \
+        --num_sample_points 5000 \
+        --num_grasps 1200 \
+        --topk_num_grasps -1 \
+        --ee_from_grasp_pos 0 0 -0.159 \
+        --ee_from_grasp_quat_xyzw 0 0 -0.707106781 0.707106781 \
+        --task_grasp_quat_xyzw -0.707106781 0.707106781 0 0 \
+        --task_grasp_offset_z -0.35 \
+        --output_file source/isaaclab_tasks/isaaclab_tasks/contrib/deploy/gear_assembly/config/rizon_4s/graspgenx_grav_grasp_poses.json
+
+The previous config used one manually specified grasp rotation per robot and offsets derived from the known gear shaft
+offsets: ``gear_small=0.076125``, ``gear_medium=0.030375``, and ``gear_large=-0.045375``. The generated values stay near
+those manually selected task frames, but add GraspGenX's per-gear lateral correction and per-gear rotation.
+
+.. list-table:: GraspGenX values compared with previous manual values
+   :header-rows: 1
+   :widths: 18 16 33 33
+
+   * - Config
+     - Gear
+     - Previous manual ``offset`` / ``quat_xyzw``
+     - Generated ``offset`` / ``quat_xyzw``
+   * - UR10e 2F-140
+     - small
+     - ``[0.0, 0.076125, -0.26]`` / ``[0.707106781, 0.707106781, 0, 0]``
+     - ``[-0.000429416, 0.076112497, -0.259985175]`` / ``[0.705514212, 0.708695771, 0, 0]``
+   * - UR10e 2F-140
+     - medium
+     - ``[0.0, 0.030375, -0.26]`` / ``[0.707106781, 0.707106781, 0, 0]``
+     - ``[0.000001774, 0.029830178, -0.260077011]`` / ``[0.705544291, 0.708665827, 0, 0]``
+   * - UR10e 2F-140
+     - large
+     - ``[0.0, -0.045375, -0.26]`` / ``[0.707106781, 0.707106781, 0, 0]``
+     - ``[-0.000996780, -0.045612515, -0.260057947]`` / ``[0.701473207, 0.712695825, 0, 0]``
+   * - UR10e 2F-85
+     - small
+     - ``[0.0, 0.076125, -0.19]`` / ``[0.707106781, 0.707106781, 0, 0]``
+     - ``[-0.000073991, 0.076056871, -0.190985877]`` / ``[0.706986198, 0.707227344, 0, 0]``
+   * - UR10e 2F-85
+     - medium
+     - ``[0.0, 0.030375, -0.19]`` / ``[0.707106781, 0.707106781, 0, 0]``
+     - ``[0.000000679, 0.030927935, -0.191083029]`` / ``[0.704284107, 0.709918232, 0, 0]``
+   * - UR10e 2F-85
+     - large
+     - ``[0.0, -0.045375, -0.19]`` / ``[0.707106781, 0.707106781, 0, 0]``
+     - ``[-0.000596972, -0.044379550, -0.191043448]`` / ``[0.715216048, 0.698903430, 0, 0]``
+   * - Rizon4s Grav
+     - small
+     - ``[0.0, -0.076125, -0.35]`` / ``[-0.707, 0.707, 0, 0]``
+     - ``[0.001622864, -0.076330531, -0.349966936]`` / ``[-0.714114514, 0.700028900, 0, 0]``
+   * - Rizon4s Grav
+     - medium
+     - ``[0.0, -0.030375, -0.35]`` / ``[-0.707, 0.707, 0, 0]``
+     - ``[0.000577562, -0.030748795, -0.350070929]`` / ``[-0.707553261, 0.706660019, 0, 0]``
+   * - Rizon4s Grav
+     - large
+     - ``[0.0, 0.045375, -0.35]`` / ``[-0.707, 0.707, 0, 0]``
+     - ``[0.000233278, 0.046329260, -0.350048443]`` / ``[-0.712168000, 0.702009074, 0, 0]``
+
 Reward Shaping
 ~~~~~~~~~~~~~~
 

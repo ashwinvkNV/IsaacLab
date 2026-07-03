@@ -25,9 +25,7 @@ def build_gear_grasp_offsets(gear_offsets_grasp: dict[str, list[float]], device:
         Tensor of shape ``(3, 3)`` ordered as ``gear_small``, ``gear_medium``, ``gear_large``.
     """
     if not isinstance(gear_offsets_grasp, dict):
-        raise TypeError(
-            f"'gear_offsets_grasp' parameter must be a dict, got {type(gear_offsets_grasp).__name__}."
-        )
+        raise TypeError(f"'gear_offsets_grasp' parameter must be a dict, got {type(gear_offsets_grasp).__name__}.")
 
     offsets = []
     for gear_type in GEAR_TYPES:

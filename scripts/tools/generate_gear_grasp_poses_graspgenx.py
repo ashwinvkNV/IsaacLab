@@ -177,7 +177,16 @@ def _prepare_graspgenx_imports(graspgenx_root: Path | None):
             "`/path/to/GraspGenX/.venv/bin/python scripts/tools/generate_gear_grasp_poses_graspgenx.py ...`."
         ) from exc
 
-    return torch, trimesh, tra, sample_points, get_checkpoints_version_dir, GraspGenXSampler, load_model_cfg, run_planner_on_object
+    return (
+        torch,
+        trimesh,
+        tra,
+        sample_points,
+        get_checkpoints_version_dir,
+        GraspGenXSampler,
+        load_model_cfg,
+        run_planner_on_object,
+    )
 
 
 def _load_mesh_data(mesh_file: Path, scale: float, num_sample_points: int, trimesh: Any, tra: Any, sample_points: Any):
@@ -226,12 +235,12 @@ def _parse_float_csv(value: str) -> tuple[float, ...]:
     return tuple(float(item.strip()) for item in value.split(",") if item.strip())
 
 
-def _matrix_from_pos_quat_xyzw(pos: tuple[float, ...] | list[float], quat_xyzw: tuple[float, ...] | list[float], tra: Any):
+def _matrix_from_pos_quat_xyzw(
+    pos: tuple[float, ...] | list[float], quat_xyzw: tuple[float, ...] | list[float], tra: Any
+):
     quat_xyzw_array = np.asarray(quat_xyzw, dtype=np.float64)
     quat_xyzw_array = quat_xyzw_array / np.linalg.norm(quat_xyzw_array)
-    transform = tra.quaternion_matrix(
-        [quat_xyzw_array[3], quat_xyzw_array[0], quat_xyzw_array[1], quat_xyzw_array[2]]
-    )
+    transform = tra.quaternion_matrix([quat_xyzw_array[3], quat_xyzw_array[0], quat_xyzw_array[1], quat_xyzw_array[2]])
     transform[:3, 3] = np.asarray(pos, dtype=np.float64)
     return transform
 
@@ -251,7 +260,9 @@ def _quat_angle_rad(quat_xyzw_1: np.ndarray, quat_xyzw_2: np.ndarray) -> float:
     return float(2.0 * np.arccos(np.clip(dot, -1.0, 1.0)))
 
 
-def _pose_to_isaaclab_grasp_fields(transform_object_gripper: np.ndarray, tra: Any) -> tuple[list[float], list[float], list[float]]:
+def _pose_to_isaaclab_grasp_fields(
+    transform_object_gripper: np.ndarray, tra: Any
+) -> tuple[list[float], list[float], list[float]]:
     """Convert a GraspGenX object-frame pose to Isaac Lab grasp offset fields.
 
     GraspGenX returns the gripper pose in the object frame. Isaac Lab stores the
@@ -392,9 +403,16 @@ def _generate_one_pose(
 def main() -> None:
     args = parse_args()
 
-    torch, trimesh, tra, sample_points, get_checkpoints_version_dir, GraspGenXSampler, load_model_cfg, run_planner_on_object = (
-        _prepare_graspgenx_imports(args.graspgenx_root)
-    )
+    (
+        torch,
+        trimesh,
+        tra,
+        sample_points,
+        get_checkpoints_version_dir,
+        GraspGenXSampler,
+        load_model_cfg,
+        run_planner_on_object,
+    ) = _prepare_graspgenx_imports(args.graspgenx_root)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
