@@ -1,4 +1,4 @@
 Added
 ^^^^^
 
-* Added an offline GraspGenX helper for printing manually configurable gear assembly grasp pose values.
+* Added an offline GraspGenX helper for printing manually configurable grasp pose values.
