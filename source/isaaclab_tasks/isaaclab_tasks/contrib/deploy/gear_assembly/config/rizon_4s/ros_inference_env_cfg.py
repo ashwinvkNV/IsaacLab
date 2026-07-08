@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import math
+import sys
+from pathlib import Path
 
 import torch
 
@@ -11,12 +13,43 @@ from isaaclab.assets import RigidObjectCfg
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.utils.configclass import configclass
 
+from isaaclab_tasks.contrib.deploy.mdp.delayed_joint_actions_cfg import ShapedDelayedRelativeJointPositionActionCfg
+
 from .joint_pos_env_cfg import Rizon4sGearAssemblyEnvCfg
+
+ISAACLAB_ROOT = Path(__file__).resolve().parents[8]
+FLEXIV_ARM_JOINT_NAMES = ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"]
+FLEXIV_ACTION_LATENCY_MS = 20.0
+FLEXIV_PHYSX_SYSID_ACTUATOR_YAML = "flexiv/manual/flexiv_pd_only_gravityoff_high_cmdlimits_tuned_physx.yaml"
+FLEXIV_PHYSX_SYSID_ACTUATOR_YAML_PATH = f"input/actuator_models/{FLEXIV_PHYSX_SYSID_ACTUATOR_YAML}"
+FLEXIV_ROBOT_COLLECTION_COMMAND_VELOCITY_LIMIT = 2.0
+FLEXIV_ROBOT_COLLECTION_COMMAND_ACCELERATION_LIMIT = 3.0
 
 
 def constant_obs(env, value: tuple) -> torch.Tensor:
     """Observation function that returns a fixed tensor every step."""
     return torch.tensor([value], device=env.device, dtype=torch.float32).expand(env.num_envs, -1)
+
+
+def _load_implicit_actuator_cfg(actuator_yaml: str):
+    if str(ISAACLAB_ROOT) not in sys.path:
+        sys.path.append(str(ISAACLAB_ROOT))
+    from input.actuator_models import load_implicit_actuator_cfg
+
+    return load_implicit_actuator_cfg(actuator_yaml, FLEXIV_ARM_JOINT_NAMES)
+
+
+def _replace_arm_actuator(robot_cfg, actuator_yaml: str) -> None:
+    """Install a single tuned arm actuator while preserving gripper actuators."""
+    gripper_actuators = {
+        actuator_name: actuator_cfg
+        for actuator_name, actuator_cfg in robot_cfg.actuators.items()
+        if actuator_name.startswith("gripper")
+    }
+    robot_cfg.actuators = {
+        "arm": _load_implicit_actuator_cfg(actuator_yaml),
+        **gripper_actuators,
+    }
 
 
 @configclass
@@ -53,6 +86,19 @@ class Rizon4sGearAssemblyROSInferenceEnvCfg(Rizon4sGearAssemblyEnvCfg):
 
         # Dynamically generate action_scale_joint_space based on action_space
         self.action_scale_joint_space = [self.joint_action_scale] * self.action_space
+
+        _replace_arm_actuator(self.scene.robot, FLEXIV_PHYSX_SYSID_ACTUATOR_YAML)
+        self.flexiv_tuned_actuator_yaml = FLEXIV_PHYSX_SYSID_ACTUATOR_YAML_PATH
+        self.flexiv_action_latency_ms = FLEXIV_ACTION_LATENCY_MS
+        self.actions.arm_action = ShapedDelayedRelativeJointPositionActionCfg(
+            asset_name="robot",
+            joint_names=FLEXIV_ARM_JOINT_NAMES,
+            scale=self.joint_action_scale,
+            use_zero_offset=True,
+            latency_s=FLEXIV_ACTION_LATENCY_MS / 1000.0,
+            command_velocity_limit=FLEXIV_ROBOT_COLLECTION_COMMAND_VELOCITY_LIMIT,
+            command_acceleration_limit=FLEXIV_ROBOT_COLLECTION_COMMAND_ACCELERATION_LIMIT,
+        )
 
         # Override robot initial pose for ROS inference (fixed pose, no randomization)
         # Joint positions and pos are inherited from parent, only override rotation to be deterministic
