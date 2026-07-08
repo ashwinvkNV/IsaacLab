@@ -54,6 +54,12 @@ class Rizon4sGearAssemblyROSInferenceEnvCfg(Rizon4sGearAssemblyEnvCfg):
         # Dynamically generate action_scale_joint_space based on action_space
         self.action_scale_joint_space = [self.joint_action_scale] * self.action_space
 
+        # Match the SysID/deployment physics rate while keeping the default
+        # develop action term and actuator model unchanged.
+        self.decimation = 4
+        self.sim.dt = 1.0 / 200.0
+        self.sim.render_interval = self.decimation
+
         # Override robot initial pose for ROS inference (fixed pose, no randomization)
         # Joint positions and pos are inherited from parent, only override rotation to be deterministic
         self.scene.robot.init_state.rot = (0.0, 0.0, 0.0, 1.0)  # Identity quaternion (x, y, z, w)
