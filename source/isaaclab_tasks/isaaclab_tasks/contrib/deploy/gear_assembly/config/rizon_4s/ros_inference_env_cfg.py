@@ -11,7 +11,13 @@ from isaaclab.assets import RigidObjectCfg
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.utils.configclass import configclass
 
+from isaaclab_tasks.contrib.deploy.mdp.delayed_joint_actions_cfg import ShapedDelayedRelativeJointPositionActionCfg
+
 from .joint_pos_env_cfg import Rizon4sGearAssemblyEnvCfg
+
+FLEXIV_ARM_JOINT_NAMES = ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"]
+FLEXIV_ROBOT_COLLECTION_COMMAND_VELOCITY_LIMIT = 2.0
+FLEXIV_ROBOT_COLLECTION_COMMAND_ACCELERATION_LIMIT = 3.0
 
 
 def constant_obs(env, value: tuple) -> torch.Tensor:
@@ -53,6 +59,16 @@ class Rizon4sGearAssemblyROSInferenceEnvCfg(Rizon4sGearAssemblyEnvCfg):
 
         # Dynamically generate action_scale_joint_space based on action_space
         self.action_scale_joint_space = [self.joint_action_scale] * self.action_space
+
+        self.actions.arm_action = ShapedDelayedRelativeJointPositionActionCfg(
+            asset_name="robot",
+            joint_names=FLEXIV_ARM_JOINT_NAMES,
+            scale=self.joint_action_scale,
+            use_zero_offset=True,
+            latency_s=0.0,
+            command_velocity_limit=FLEXIV_ROBOT_COLLECTION_COMMAND_VELOCITY_LIMIT,
+            command_acceleration_limit=FLEXIV_ROBOT_COLLECTION_COMMAND_ACCELERATION_LIMIT,
+        )
 
         # Override robot initial pose for ROS inference (fixed pose, no randomization)
         # Joint positions and pos are inherited from parent, only override rotation to be deterministic
