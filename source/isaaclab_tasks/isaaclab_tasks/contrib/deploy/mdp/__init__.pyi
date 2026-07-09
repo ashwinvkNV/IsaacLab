@@ -22,8 +22,18 @@ __all__ = [
     "log_gear_insertion_pose_error_metrics",
     "reset_when_gear_dropped",
     "reset_when_gear_orientation_exceeds_threshold",
+    "DelayedRelativeJointPositionAction",
+    "DelayedRelativeJointPositionActionCfg",
+    "ShapedDelayedRelativeJointPositionAction",
+    "ShapedDelayedRelativeJointPositionActionCfg",
 ]
 
+from .delayed_joint_actions import (
+    DelayedRelativeJointPositionAction,
+    DelayedRelativeJointPositionActionCfg,
+    ShapedDelayedRelativeJointPositionAction,
+    ShapedDelayedRelativeJointPositionActionCfg,
+)
 from .events import (
     log_gear_insertion_pose_error_metrics,
     randomize_gear_type,
