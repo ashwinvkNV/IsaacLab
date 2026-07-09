@@ -357,6 +357,15 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
             friction=0.0,
             armature=0.0,
         )
+        self.scene.robot.actuators["gripper_outer"] = ImplicitActuatorCfg(
+            joint_names_expr=[".*_outer_finger_joint"],
+            effort_limit_sim=2.0,
+            velocity_limit_sim=1.0,
+            stiffness=2e3,
+            damping=1e1,
+            friction=0.0,
+            armature=0.0,
+        )
 
         # Override gear initial states for Rizon (closer to robot, centered)
         self.scene.factory_gear_base.init_state = RigidObjectCfg.InitialStateCfg(
