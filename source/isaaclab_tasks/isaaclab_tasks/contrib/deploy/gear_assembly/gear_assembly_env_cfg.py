@@ -249,6 +249,17 @@ class EventCfg:
         },
     )
 
+    gear_insertion_latched_success_metric = EventTerm(
+        func=mdp.log_latched_gear_insertion_success_metrics,
+        mode="interval",
+        interval_range_s=(0.0, 0.0),
+        is_global_time=True,
+        params={
+            "asset_cfg": SceneEntityCfg("factory_gear_base"),
+            "pose_error_thresholds": (0.001, 0.003, 0.005),
+        },
+    )
+
 
 @configclass
 class RewardsCfg:

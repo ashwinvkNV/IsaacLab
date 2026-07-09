@@ -161,6 +161,17 @@ class EventCfg:
         },
     )
 
+    gear_insertion_latched_success_metric = EventTerm(
+        func=gear_assembly_events.log_latched_gear_insertion_success_metrics,
+        mode="interval",
+        interval_range_s=(0.0, 0.0),
+        is_global_time=True,
+        params={
+            "asset_cfg": SceneEntityCfg("factory_gear_base"),
+            "pose_error_thresholds": (0.001, 0.003, 0.005),
+        },
+    )
+
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
     randomize_gears_and_base_pose = EventTerm(

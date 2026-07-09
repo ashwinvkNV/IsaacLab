@@ -98,27 +98,26 @@ class randomize_gear_type(ManagerTermBase):
         return self._current_gear_type_indices
 
 
-def log_gear_insertion_pose_error_metrics(
+def _resolve_env_ids(env: ManagerBasedEnv, env_ids: torch.Tensor | None) -> torch.Tensor:
+    """Resolve optional event env ids into a device tensor."""
+    if env_ids is None:
+        return torch.arange(env.num_envs, device=env.device)
+    return env_ids
+
+
+def _compute_active_gear_pose_errors(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor | None,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
-    pose_error_thresholds: tuple[float, ...] = (0.001, 0.003, 0.005),
-) -> None:
-    """Log insertion pose-error metrics for the active gear against the gear base.
-
-    The Factory gear assets are authored such that an inserted gear has the same
-    root position as the gear base. This metric intentionally logs only to
-    ``env.extras["log"]`` and does not contribute to the reward.
-    """
+    asset_cfg: SceneEntityCfg,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute active gear pose errors relative to the gear base."""
     if not hasattr(env, "_gear_type_manager"):
         raise RuntimeError(
             "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
             "before logging gear insertion metrics."
         )
 
-    if env_ids is None:
-        env_ids = torch.arange(env.num_envs, device=env.device)
-
+    env_ids = _resolve_env_ids(env, env_ids)
     base_asset = env.scene[asset_cfg.name]
     gear_assets = {
         "gear_small": env.scene["factory_gear_small"],
@@ -143,6 +142,22 @@ def log_gear_insertion_pose_error_metrics(
     z_error = pos_error[:, 2]
     pose_error = torch.maximum(xy_error, torch.abs(z_error))
     distance_error = torch.linalg.norm(pos_error, dim=-1)
+    return pose_error, xy_error, z_error, distance_error
+
+
+def log_gear_insertion_pose_error_metrics(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
+    pose_error_thresholds: tuple[float, ...] = (0.001, 0.003, 0.005),
+) -> None:
+    """Log insertion pose-error metrics for the active gear against the gear base.
+
+    The Factory gear assets are authored such that an inserted gear has the same
+    root position as the gear base. This metric intentionally logs only to
+    ``env.extras["log"]`` and does not contribute to the reward.
+    """
+    pose_error, xy_error, z_error, distance_error = _compute_active_gear_pose_errors(env, env_ids, asset_cfg)
     if not hasattr(env, "extras"):
         env.extras = {}
     if "log" not in env.extras:
@@ -161,6 +176,98 @@ def log_gear_insertion_pose_error_metrics(
     env.extras["log"]["gear_success/z_error_mean_m"] = z_error.mean().item()
     env.extras["log"]["gear_success/abs_z_error_min_m"] = torch.abs(z_error).min().item()
     env.extras["log"]["gear_success/distance_error_min_m"] = distance_error.min().item()
+
+
+def log_latched_gear_insertion_success_metrics(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
+    pose_error_thresholds: tuple[float, ...] = (0.001, 0.003, 0.005),
+) -> None:
+    """Log episode-level insertion success latched over the full episode.
+
+    A success is latched when the active gear pose error falls below a threshold
+    at any point during the episode. The episode only counts as successful if it
+    later ends by timeout without any non-timeout termination such as gear drop
+    or orientation failure. This term logs metrics only and does not affect
+    rewards or termination behavior.
+    """
+    env_ids = _resolve_env_ids(env, env_ids)
+    thresholds = torch.tensor(pose_error_thresholds, device=env.device, dtype=torch.float32)
+    state = _get_latched_gear_success_state(env, thresholds)
+
+    if not hasattr(env, "extras"):
+        env.extras = {}
+    if "log" not in env.extras:
+        env.extras["log"] = {}
+
+    done = env.reset_buf[env_ids].bool()
+    done_env_ids = env_ids[done]
+    done_count = done_env_ids.numel()
+    if done_count > 0:
+        timeouts = env.reset_time_outs[done_env_ids].bool()
+        failures = env.reset_terminated[done_env_ids].bool()
+        clean_timeouts = timeouts & ~failures
+        successful = clean_timeouts.unsqueeze(-1) & state["latched_success"][done_env_ids]
+
+        state["episode_count"] += float(done_count)
+        state["timeout_count"] += timeouts.sum().to(torch.float64)
+        state["clean_timeout_count"] += clean_timeouts.sum().to(torch.float64)
+        state["failure_count"] += failures.sum().to(torch.float64)
+        state["success_count"] += successful.sum(dim=0).to(torch.float64)
+        state["latched_success"][done_env_ids] = False
+
+    active_env_ids = env_ids[~done]
+    if active_env_ids.numel() > 0:
+        pose_error, _, _, _ = _compute_active_gear_pose_errors(env, active_env_ids, asset_cfg)
+        state["latched_success"][active_env_ids] |= pose_error.unsqueeze(-1) <= thresholds
+
+    log = env.extras["log"]
+    episode_count = torch.clamp(state["episode_count"], min=1.0)
+    clean_timeout_count = torch.clamp(state["clean_timeout_count"], min=1.0)
+    log["gear_success/episode_count"] = state["episode_count"].item()
+    log["gear_success/episode_timeout_count"] = state["timeout_count"].item()
+    log["gear_success/episode_clean_timeout_count"] = state["clean_timeout_count"].item()
+    log["gear_success/episode_failure_count"] = state["failure_count"].item()
+    log["gear_success/episode_timeout_fraction"] = (state["timeout_count"] / episode_count).item()
+    log["gear_success/episode_failure_fraction"] = (state["failure_count"] / episode_count).item()
+
+    for index, threshold in enumerate(pose_error_thresholds):
+        threshold_mm = int(round(threshold * 1000.0))
+        success_count = state["success_count"][index]
+        log[f"gear_success/episode_success_count_{threshold_mm}mm"] = success_count.item()
+        log[f"gear_success/episode_success_rate_{threshold_mm}mm"] = (success_count / episode_count).item()
+        log[f"gear_success/clean_timeout_success_rate_{threshold_mm}mm"] = (
+            success_count / clean_timeout_count
+        ).item()
+        log[f"gear_success/latched_pose_error_rate_{threshold_mm}mm"] = (
+            state["latched_success"][:, index].float().mean().item()
+        )
+
+
+def _get_latched_gear_success_state(env: ManagerBasedEnv, thresholds: torch.Tensor) -> dict[str, torch.Tensor]:
+    """Return persistent state for latched episode success metrics."""
+    state = getattr(env, "_latched_gear_insertion_success_metrics", None)
+    needs_init = (
+        state is None
+        or state["pose_error_thresholds"].shape != thresholds.shape
+        or not torch.allclose(state["pose_error_thresholds"], thresholds)
+        or state["latched_success"].shape[0] != env.num_envs
+    )
+    if not needs_init:
+        return state
+
+    state = {
+        "pose_error_thresholds": thresholds,
+        "latched_success": torch.zeros((env.num_envs, len(thresholds)), device=env.device, dtype=torch.bool),
+        "episode_count": torch.zeros((), device=env.device, dtype=torch.float64),
+        "timeout_count": torch.zeros((), device=env.device, dtype=torch.float64),
+        "clean_timeout_count": torch.zeros((), device=env.device, dtype=torch.float64),
+        "failure_count": torch.zeros((), device=env.device, dtype=torch.float64),
+        "success_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
+    }
+    env._latched_gear_insertion_success_metrics = state
+    return state
 
 
 class set_robot_to_grasp_pose(ManagerTermBase):
