@@ -163,6 +163,186 @@ def log_gear_insertion_pose_error_metrics(
     env.extras["log"]["gear_success/distance_error_min_m"] = distance_error.min().item()
 
 
+class log_gear_grasp_metrics(ManagerTermBase):
+    """Log active gear grasp/slip metrics against the robot end-effector.
+
+    These metrics are diagnostic only. They are written to ``env.extras["log"]``
+    for TensorBoard and do not contribute to the reward.
+    """
+
+    def __init__(self, cfg: EventTermCfg, env: ManagerBasedEnv):
+        """Initialize cached handles and buffers for grasp diagnostics."""
+        super().__init__(cfg, env)
+
+        self.robot_asset_cfg: SceneEntityCfg = cfg.params.get("robot_asset_cfg", SceneEntityCfg("robot"))
+        self.robot_asset: Articulation = env.scene[self.robot_asset_cfg.name]
+
+        if "end_effector_body_name" not in cfg.params:
+            raise ValueError("'end_effector_body_name' parameter is required in log_gear_grasp_metrics.")
+        if "grasp_rot_offset" not in cfg.params:
+            raise ValueError("'grasp_rot_offset' parameter is required in log_gear_grasp_metrics.")
+        if "gear_offsets_grasp" not in cfg.params:
+            raise ValueError("'gear_offsets_grasp' parameter is required in log_gear_grasp_metrics.")
+        if "hand_grasp_width" not in cfg.params:
+            raise ValueError("'hand_grasp_width' parameter is required in log_gear_grasp_metrics.")
+
+        gear_offsets_grasp = cfg.params["gear_offsets_grasp"]
+        self.gear_grasp_offsets_stacked = torch.stack(
+            [
+                torch.tensor(gear_offsets_grasp["gear_small"], device=env.device, dtype=torch.float32),
+                torch.tensor(gear_offsets_grasp["gear_medium"], device=env.device, dtype=torch.float32),
+                torch.tensor(gear_offsets_grasp["gear_large"], device=env.device, dtype=torch.float32),
+            ],
+            dim=0,
+        )
+
+        hand_grasp_width = cfg.params["hand_grasp_width"]
+        self.hand_grasp_width_stacked = torch.tensor(
+            [
+                hand_grasp_width["gear_small"],
+                hand_grasp_width["gear_medium"],
+                hand_grasp_width["gear_large"],
+            ],
+            device=env.device,
+            dtype=torch.float32,
+        )
+
+        grasp_rot_offset = cfg.params["grasp_rot_offset"]
+        self.grasp_rot_offset_tensor = torch.tensor(grasp_rot_offset, device=env.device, dtype=torch.float32)
+
+        self.gear_assets = {
+            "gear_small": env.scene["factory_gear_small"],
+            "gear_medium": env.scene["factory_gear_medium"],
+            "gear_large": env.scene["factory_gear_large"],
+        }
+
+        eef_indices, _ = self.robot_asset.find_bodies([cfg.params["end_effector_body_name"]])
+        if len(eef_indices) == 0:
+            raise ValueError(f"End effector body '{cfg.params['end_effector_body_name']}' not found in robot.")
+        self.eef_idx = eef_indices[0]
+
+        finger_joint_name = cfg.params.get("finger_joint_name", "finger_joint")
+        finger_joint_indices, _ = self.robot_asset.find_joints([finger_joint_name])
+        if len(finger_joint_indices) == 0:
+            raise ValueError(f"Finger joint '{finger_joint_name}' not found in robot.")
+        self.finger_joint_idx = finger_joint_indices[0]
+
+        passive_joint_names_expr = cfg.params.get("passive_joint_names_expr", [".*_knuckle_joint"])
+        passive_joint_indices, passive_joint_names = self.robot_asset.find_joints(passive_joint_names_expr)
+        self.passive_joint_indices = passive_joint_indices
+        self.passive_joint_signs = torch.ones(len(passive_joint_indices), device=env.device, dtype=torch.float32)
+        for idx, joint_name in enumerate(passive_joint_names):
+            if "outer_finger_joint" in joint_name:
+                self.passive_joint_signs[idx] = -1.0
+
+        self.env_indices = torch.arange(env.num_envs, device=env.device)
+        self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+        self.all_gear_pos_buffer = torch.zeros(env.num_envs, 3, 3, device=env.device, dtype=torch.float32)
+        self.all_gear_quat_buffer = torch.zeros(env.num_envs, 3, 4, device=env.device, dtype=torch.float32)
+
+    def __call__(
+        self,
+        env: ManagerBasedEnv,
+        env_ids: torch.Tensor | None,
+        robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        end_effector_body_name: str | None = None,
+        gear_offsets_grasp: dict | None = None,
+        grasp_rot_offset: list | None = None,
+        hand_grasp_width: dict | None = None,
+        slip_distance_thresholds: tuple[float, ...] = (0.01, 0.02, 0.05),
+        finger_joint_name: str = "finger_joint",
+        passive_joint_names_expr: list[str] | None = None,
+    ) -> None:
+        """Log grasp distance, gear orientation, and gripper tracking diagnostics."""
+        if not hasattr(env, "_gear_type_manager"):
+            raise RuntimeError(
+                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
+                "before logging gear grasp metrics."
+            )
+
+        if env_ids is None:
+            env_ids = self.env_indices
+        else:
+            env_ids = env_ids.to(device=env.device)
+
+        num_envs = len(env_ids)
+        env_indices = self.env_indices[:num_envs]
+
+        all_gear_type_indices = env._gear_type_manager.get_all_gear_type_indices()
+        self.gear_type_indices[:num_envs] = all_gear_type_indices[env_ids]
+        gear_type_indices = self.gear_type_indices[:num_envs]
+
+        self.all_gear_pos_buffer[:num_envs, 0, :] = self.gear_assets["gear_small"].data.root_link_pos_w.torch[env_ids]
+        self.all_gear_pos_buffer[:num_envs, 1, :] = self.gear_assets["gear_medium"].data.root_link_pos_w.torch[env_ids]
+        self.all_gear_pos_buffer[:num_envs, 2, :] = self.gear_assets["gear_large"].data.root_link_pos_w.torch[env_ids]
+        self.all_gear_quat_buffer[:num_envs, 0, :] = self.gear_assets["gear_small"].data.root_link_quat_w.torch[
+            env_ids
+        ]
+        self.all_gear_quat_buffer[:num_envs, 1, :] = self.gear_assets["gear_medium"].data.root_link_quat_w.torch[
+            env_ids
+        ]
+        self.all_gear_quat_buffer[:num_envs, 2, :] = self.gear_assets["gear_large"].data.root_link_quat_w.torch[
+            env_ids
+        ]
+
+        gear_pos_world = self.all_gear_pos_buffer[:num_envs][env_indices, gear_type_indices]
+        gear_quat_world = self.all_gear_quat_buffer[:num_envs][env_indices, gear_type_indices]
+        gear_quat_grasp = math_utils.quat_mul(
+            gear_quat_world, self.grasp_rot_offset_tensor.unsqueeze(0).expand(num_envs, -1)
+        )
+        gear_grasp_offsets = self.gear_grasp_offsets_stacked[gear_type_indices]
+        gear_grasp_pos_world = gear_pos_world + math_utils.quat_apply(gear_quat_grasp, gear_grasp_offsets)
+
+        eef_pos_world = self.robot_asset.data.body_link_pos_w.torch[env_ids, self.eef_idx]
+        eef_quat_world = self.robot_asset.data.body_link_quat_w.torch[env_ids, self.eef_idx]
+        slip_distances = torch.linalg.norm(gear_grasp_pos_world - eef_pos_world, dim=-1)
+
+        relative_quat = math_utils.quat_mul(gear_quat_grasp, math_utils.quat_conjugate(eef_quat_world))
+        roll, pitch, yaw = math_utils.euler_xyz_from_quat(relative_quat)
+
+        joint_pos = self.robot_asset.data.joint_pos.torch[env_ids]
+        expected_finger_pos = self.hand_grasp_width_stacked[gear_type_indices]
+        finger_joint_pos = joint_pos[:, self.finger_joint_idx]
+        finger_joint_error = finger_joint_pos - expected_finger_pos
+
+        if len(self.passive_joint_indices) > 0:
+            passive_joint_pos = joint_pos[:, self.passive_joint_indices]
+            expected_passive_pos = expected_finger_pos.unsqueeze(-1) * self.passive_joint_signs.unsqueeze(0)
+            passive_joint_error = passive_joint_pos - expected_passive_pos
+            passive_joint_abs_pos = torch.abs(passive_joint_pos)
+            passive_joint_abs_error = torch.abs(passive_joint_error)
+        else:
+            passive_joint_abs_pos = torch.zeros((num_envs, 1), device=env.device)
+            passive_joint_abs_error = torch.zeros((num_envs, 1), device=env.device)
+
+        if not hasattr(env, "extras"):
+            env.extras = {}
+        if "log" not in env.extras:
+            env.extras["log"] = {}
+
+        env.extras["log"]["gear_grasp/slip_distance_mean_m"] = slip_distances.mean().item()
+        env.extras["log"]["gear_grasp/slip_distance_max_m"] = slip_distances.max().item()
+        env.extras["log"]["gear_grasp/slip_distance_min_m"] = slip_distances.min().item()
+        for threshold in slip_distance_thresholds:
+            threshold_cm = int(round(threshold * 100.0))
+            env.extras["log"][f"gear_grasp/slip_success_rate_{threshold_cm}cm"] = (
+                (slip_distances <= threshold).float().mean().item()
+            )
+
+        env.extras["log"]["gear_grasp/relative_roll_abs_mean_rad"] = torch.abs(roll).mean().item()
+        env.extras["log"]["gear_grasp/relative_pitch_abs_mean_rad"] = torch.abs(pitch).mean().item()
+        env.extras["log"]["gear_grasp/relative_yaw_abs_mean_rad"] = torch.abs(yaw).mean().item()
+
+        env.extras["log"]["gripper/finger_joint_pos_mean"] = finger_joint_pos.mean().item()
+        env.extras["log"]["gripper/finger_joint_pos_max"] = finger_joint_pos.max().item()
+        env.extras["log"]["gripper/finger_joint_tracking_error_abs_mean"] = torch.abs(finger_joint_error).mean().item()
+        env.extras["log"]["gripper/finger_joint_tracking_error_abs_max"] = torch.abs(finger_joint_error).max().item()
+        env.extras["log"]["gripper/passive_joint_abs_pos_mean"] = passive_joint_abs_pos.mean().item()
+        env.extras["log"]["gripper/passive_joint_abs_pos_max"] = passive_joint_abs_pos.max().item()
+        env.extras["log"]["gripper/passive_joint_tracking_error_abs_mean"] = passive_joint_abs_error.mean().item()
+        env.extras["log"]["gripper/passive_joint_tracking_error_abs_max"] = passive_joint_abs_error.max().item()
+
+
 class set_robot_to_grasp_pose(ManagerTermBase):
     """Set robot to grasp pose using IK with pre-cached tensors.
 

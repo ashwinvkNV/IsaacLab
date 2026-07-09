@@ -19,6 +19,7 @@ __all__ = [
     "keypoint_entity_error_exp",
     "keypoint_ee_grasp_error",
     "keypoint_ee_grasp_error_exp",
+    "log_gear_grasp_metrics",
     "log_gear_insertion_pose_error_metrics",
     "reset_when_gear_dropped",
     "reset_when_gear_orientation_exceeds_threshold",
@@ -35,6 +36,7 @@ from .delayed_joint_actions import (
     ShapedDelayedRelativeJointPositionActionCfg,
 )
 from .events import (
+    log_gear_grasp_metrics,
     log_gear_insertion_pose_error_metrics,
     randomize_gear_type,
     randomize_gears_and_base_pose,

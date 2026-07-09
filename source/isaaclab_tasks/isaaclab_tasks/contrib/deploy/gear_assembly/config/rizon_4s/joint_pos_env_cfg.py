@@ -161,6 +161,19 @@ class EventCfg:
         },
     )
 
+    gear_grasp_diagnostic_metric = EventTerm(
+        func=gear_assembly_events.log_gear_grasp_metrics,
+        mode="interval",
+        interval_range_s=(0.0, 0.0),
+        is_global_time=True,
+        params={
+            "robot_asset_cfg": SceneEntityCfg("robot"),
+            "slip_distance_thresholds": (0.01, 0.02, 0.05),
+            "finger_joint_name": "finger_joint",
+            "passive_joint_names_expr": [".*_knuckle_joint", ".*_outer_finger_joint"],
+        },
+    )
+
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
     randomize_gears_and_base_pose = EventTerm(
@@ -346,6 +359,15 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
             friction=0.0,
             armature=0.0,
         )
+        self.scene.robot.actuators["gripper_outer"] = ImplicitActuatorCfg(
+            joint_names_expr=[".*_outer_finger_joint"],
+            effort_limit_sim=2.0,
+            velocity_limit_sim=1.0,
+            stiffness=2e3,
+            damping=1e1,
+            friction=0.0,
+            armature=0.0,
+        )
 
         # Override gear initial states for Rizon (closer to robot, centered)
         self.scene.factory_gear_base.init_state = RigidObjectCfg.InitialStateCfg(
@@ -394,6 +416,10 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
         self.events.set_robot_to_grasp_pose.params["num_arm_joints"] = self.num_arm_joints
         self.events.set_robot_to_grasp_pose.params["grasp_rot_offset"] = self.grasp_rot_offset
         self.events.set_robot_to_grasp_pose.params["gripper_joint_setter_func"] = self.gripper_joint_setter_func
+        self.events.gear_grasp_diagnostic_metric.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.events.gear_grasp_diagnostic_metric.params["end_effector_body_name"] = self.end_effector_body_name
+        self.events.gear_grasp_diagnostic_metric.params["grasp_rot_offset"] = self.grasp_rot_offset
+        self.events.gear_grasp_diagnostic_metric.params["hand_grasp_width"] = self.hand_grasp_width
 
         # Flexiv-specific reward terms for EE-grasp keypoint tracking
         self.rewards.end_effector_grasp_keypoint_tracking = RewTerm(
