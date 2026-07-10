@@ -10,9 +10,12 @@ from pathlib import Path
 import torch
 
 from isaaclab.assets import RigidObjectCfg
+from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.configclass import configclass
 
+import isaaclab_tasks.contrib.deploy.mdp.events as gear_assembly_events
 from isaaclab_tasks.contrib.deploy.mdp.delayed_joint_actions_cfg import ShapedDelayedRelativeJointPositionActionCfg
 
 from .joint_pos_env_cfg import Rizon4sGearAssemblyEnvCfg
@@ -149,6 +152,30 @@ class Rizon4sGearAssemblyROSInferenceEnvCfg(Rizon4sGearAssemblyEnvCfg):
             latency_s=FLEXIV_ACTION_LATENCY_MS / 1000.0,
             command_velocity_limit=FLEXIV_ROBOT_COLLECTION_COMMAND_VELOCITY_LIMIT,
             command_acceleration_limit=FLEXIV_ROBOT_COLLECTION_COMMAND_ACCELERATION_LIMIT,
+        )
+
+        # The fixed joint enforces the gear-to-gripper relation, so keep the
+        # experiment focused on insertion instead of rewarding grasp tracking.
+        self.rewards.end_effector_grasp_keypoint_tracking = None
+        self.rewards.end_effector_grasp_keypoint_tracking_exp = None
+
+        fixed_grasp_params = {
+            "robot_asset_cfg": SceneEntityCfg("robot"),
+            "gear_offsets_grasp": self.gear_offsets_grasp,
+            "end_effector_body_name": self.end_effector_body_name,
+            "grasp_rot_offset": self.grasp_rot_offset,
+        }
+        self.events.fixed_grasp_select_active_joint = EventTerm(
+            func=gear_assembly_events.fixed_joint_selected_gear_to_gripper,
+            mode="reset",
+            params={**fixed_grasp_params, "operation": "select"},
+        )
+        self.events.fixed_grasp_log_attach_metrics = EventTerm(
+            func=gear_assembly_events.fixed_joint_selected_gear_to_gripper,
+            mode="interval",
+            interval_range_s=(0.0, 0.0),
+            is_global_time=True,
+            params={**fixed_grasp_params, "operation": "log"},
         )
 
         # Override robot initial pose for ROS inference (fixed pose, no randomization)

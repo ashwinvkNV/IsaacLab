@@ -204,6 +204,9 @@ class EventCfg:
         },
     )
 
+    fixed_grasp_select_active_joint = None
+    fixed_grasp_log_attach_metrics = None
+
 
 @configclass
 class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):

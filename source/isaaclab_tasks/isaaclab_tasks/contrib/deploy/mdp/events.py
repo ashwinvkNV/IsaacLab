@@ -563,6 +563,237 @@ class set_robot_to_grasp_pose(ManagerTermBase):
         self.robot_asset.set_joint_position_target_index(target=joint_pos, joint_ids=self.all_joints, env_ids=env_ids)
 
 
+class fixed_joint_selected_gear_to_gripper(ManagerTermBase):
+    """Attach the active gear to the gripper with a PhysX fixed joint.
+
+    This term authors one fixed joint per gear per environment on first reset,
+    updates the joint frames from the current reset poses, and enables only the
+    joint for the currently selected gear. It keeps the gear physically dynamic
+    and constrained to the gripper instead of overwriting the gear pose every step.
+    """
+
+    def __init__(self, cfg: EventTermCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+
+        self.robot_asset_cfg: SceneEntityCfg = cfg.params.get("robot_asset_cfg", SceneEntityCfg("robot"))
+        self.robot_asset: Articulation = env.scene[self.robot_asset_cfg.name]
+
+        if "end_effector_body_name" not in cfg.params:
+            raise ValueError("'end_effector_body_name' parameter is required for fixed_joint_selected_gear_to_gripper.")
+        if "grasp_rot_offset" not in cfg.params:
+            raise ValueError("'grasp_rot_offset' parameter is required for fixed_joint_selected_gear_to_gripper.")
+        if "gear_offsets_grasp" not in cfg.params:
+            raise ValueError("'gear_offsets_grasp' parameter is required for fixed_joint_selected_gear_to_gripper.")
+
+        self.end_effector_body_name = cfg.params["end_effector_body_name"]
+        self.gear_asset_names = ["factory_gear_small", "factory_gear_medium", "factory_gear_large"]
+        self.gear_keys = ["gear_small", "gear_medium", "gear_large"]
+
+        gear_offsets_grasp = cfg.params["gear_offsets_grasp"]
+        self.gear_grasp_offsets_stacked = torch.stack(
+            [
+                torch.tensor(gear_offsets_grasp[gear_key], device=env.device, dtype=torch.float32)
+                for gear_key in self.gear_keys
+            ],
+            dim=0,
+        )
+        self.grasp_rot_offset = torch.tensor(cfg.params["grasp_rot_offset"], device=env.device, dtype=torch.float32)
+
+        eef_indices, _ = self.robot_asset.find_bodies([self.end_effector_body_name])
+        if len(eef_indices) == 0:
+            raise ValueError(f"End effector body '{self.end_effector_body_name}' not found in robot")
+        self.eef_idx = eef_indices[0]
+
+        self._joints_authored = False
+        self._joint_paths: dict[tuple[int, str], str] = {}
+        self._gear_type_to_index = {"gear_small": 0, "gear_medium": 1, "gear_large": 2}
+
+    def __call__(
+        self,
+        env: ManagerBasedEnv,
+        env_ids: torch.Tensor | None,
+        robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        gear_offsets_grasp: dict | None = None,
+        end_effector_body_name: str | None = None,
+        grasp_rot_offset: list | None = None,
+        operation: str = "select",
+    ):
+        """Author/select fixed joints and log attach errors.
+
+        Args:
+            env: Environment instance.
+            env_ids: Environment ids affected by this event.
+            operation: ``"select"`` enables only the active gear's joint for reset
+                envs, while ``"log"`` only logs the fixed-grasp tracking error.
+        """
+        if operation not in ("author", "select", "log"):
+            raise ValueError(f"Unsupported fixed grasp operation: {operation}")
+
+        if operation == "author":
+            self._author_fixed_joints(env)
+            return
+
+        if not hasattr(env, "_gear_type_manager"):
+            raise RuntimeError(
+                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
+                "before fixed_joint_selected_gear_to_gripper is used."
+            )
+
+        env_ids = _resolve_env_ids(env, env_ids)
+        if not self._joints_authored:
+            self._author_fixed_joints(env)
+
+        if operation == "select":
+            self._select_fixed_joints(env, env_ids)
+
+        self._log_attach_error_metrics(env, env_ids)
+
+    def _author_fixed_joints(self, env: ManagerBasedEnv) -> None:
+        """Create one disabled fixed joint for each gear in each environment."""
+        from pxr import Gf, UsdPhysics
+
+        existing_joint_paths = getattr(env, "_fixed_grasp_joint_paths", None)
+        if existing_joint_paths is not None:
+            self._joint_paths = existing_joint_paths
+            self._joints_authored = True
+            return
+
+        stage = env.scene.stage
+        max_float = 3.4028234663852886e38
+
+        for env_id, env_prim_path in enumerate(env.scene.env_prim_paths):
+            eef_prim = self._find_rigid_body_prim(stage, f"{env_prim_path}/Robot", self.end_effector_body_name)
+            for gear_key in self.gear_keys:
+                gear_prim = self._find_rigid_body_prim(stage, f"{env_prim_path}/{self._gear_prim_name(gear_key)}")
+                local_pos_0, local_rot_0 = self._current_joint_frame(env, env_id, gear_key)
+                joint_path = f"{env_prim_path}/FixedGraspJoint_{gear_key}"
+                joint = UsdPhysics.FixedJoint.Define(stage, joint_path)
+                joint.CreateLocalPos0Attr().Set(local_pos_0)
+                joint.CreateLocalRot0Attr().Set(local_rot_0)
+                joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+                joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0))
+                joint.CreateBreakForceAttr().Set(max_float)
+                joint.CreateBreakTorqueAttr().Set(max_float)
+                joint.CreateJointEnabledAttr().Set(False)
+                joint.CreateBody0Rel().SetTargets([eef_prim.GetPath()])
+                joint.CreateBody1Rel().SetTargets([gear_prim.GetPath()])
+                self._joint_paths[(env_id, gear_key)] = joint_path
+
+        env._fixed_grasp_joint_paths = self._joint_paths
+        self._joints_authored = True
+
+    def _select_fixed_joints(self, env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
+        """Enable the selected gear joint and disable inactive gear joints."""
+        from pxr import UsdPhysics
+
+        stage = env.scene.stage
+        gear_type_indices = env._gear_type_manager.get_all_gear_type_indices()
+        for env_id in env_ids.tolist():
+            selected_idx = int(gear_type_indices[env_id].item())
+            for gear_key in self.gear_keys:
+                joint_path = self._joint_paths[(env_id, gear_key)]
+                joint = UsdPhysics.FixedJoint(stage.GetPrimAtPath(joint_path))
+                self._set_joint_frame_from_current_pose(env, env_id, gear_key, joint)
+                joint.GetJointEnabledAttr().Set(self._gear_type_to_index[gear_key] == selected_idx)
+
+    def _set_joint_frame_from_current_pose(self, env: ManagerBasedEnv, env_id: int, gear_key: str, joint) -> None:
+        """Set the joint's body-0 frame so it matches the current gear pose."""
+        from pxr import Gf
+
+        local_pos_0, local_rot_0 = self._current_joint_frame(env, env_id, gear_key)
+        joint.GetLocalPos0Attr().Set(local_pos_0)
+        joint.GetLocalRot0Attr().Set(local_rot_0)
+        joint.GetLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+        joint.GetLocalRot1Attr().Set(Gf.Quatf(1.0))
+
+    def _current_joint_frame(self, env: ManagerBasedEnv, env_id: int, gear_key: str):
+        """Return the gear root frame expressed in the end-effector body frame."""
+        from pxr import Gf
+
+        gear_asset = env.scene[self.gear_asset_names[self._gear_type_to_index[gear_key]]]
+        eef_pos = self.robot_asset.data.body_link_pos_w.torch[env_id, self.eef_idx].unsqueeze(0)
+        eef_quat = self.robot_asset.data.body_link_quat_w.torch[env_id, self.eef_idx].unsqueeze(0)
+        gear_pos = gear_asset.data.root_link_pos_w.torch[env_id].unsqueeze(0)
+        gear_quat = gear_asset.data.root_link_quat_w.torch[env_id].unsqueeze(0)
+
+        local_pos_0 = math_utils.quat_apply_inverse(eef_quat, gear_pos - eef_pos)[0]
+        local_rot_0 = math_utils.quat_mul(math_utils.quat_inv(eef_quat), gear_quat)[0]
+        return Gf.Vec3f(*local_pos_0.detach().cpu().tolist()), self._gf_quat_from_xyzw(local_rot_0)
+
+    def _log_attach_error_metrics(self, env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
+        """Log how well the fixed-joint grasp relation is being maintained."""
+        gear_type_indices = env._gear_type_manager.get_all_gear_type_indices()[env_ids]
+        all_gear_pos = torch.stack(
+            [env.scene[asset_name].data.root_link_pos_w.torch[env_ids] for asset_name in self.gear_asset_names],
+            dim=1,
+        )
+        all_gear_quat = torch.stack(
+            [env.scene[asset_name].data.root_link_quat_w.torch[env_ids] for asset_name in self.gear_asset_names],
+            dim=1,
+        )
+
+        row_ids = torch.arange(len(env_ids), device=env.device)
+        gear_pos = all_gear_pos[row_ids, gear_type_indices]
+        gear_quat = all_gear_quat[row_ids, gear_type_indices]
+        grasp_offsets = self.gear_grasp_offsets_stacked[gear_type_indices]
+
+        expected_eef_quat = math_utils.quat_mul(gear_quat, self.grasp_rot_offset.unsqueeze(0).expand_as(gear_quat))
+        expected_eef_pos = gear_pos + math_utils.quat_apply(expected_eef_quat, grasp_offsets)
+        eef_pos = self.robot_asset.data.body_link_pos_w.torch[env_ids, self.eef_idx]
+        eef_quat = self.robot_asset.data.body_link_quat_w.torch[env_ids, self.eef_idx]
+
+        pos_error = torch.linalg.norm(expected_eef_pos - eef_pos, dim=-1)
+        quat_error = math_utils.quat_mul(eef_quat, math_utils.quat_inv(expected_eef_quat))
+        rot_error = torch.linalg.norm(math_utils.axis_angle_from_quat(quat_error), dim=-1)
+
+        if not hasattr(env, "extras"):
+            env.extras = {}
+        if "log" not in env.extras:
+            env.extras["log"] = {}
+        env.extras["log"]["fixed_grasp/attach_pos_error_mean_m"] = pos_error.mean().item()
+        env.extras["log"]["fixed_grasp/attach_pos_error_max_m"] = pos_error.max().item()
+        env.extras["log"]["fixed_grasp/attach_rot_error_mean_rad"] = rot_error.mean().item()
+        env.extras["log"]["fixed_grasp/attach_rot_error_max_rad"] = rot_error.max().item()
+
+    @staticmethod
+    def _gear_prim_name(gear_key: str) -> str:
+        return {
+            "gear_small": "FactoryGearSmall",
+            "gear_medium": "FactoryGearMedium",
+            "gear_large": "FactoryGearLarge",
+        }[gear_key]
+
+    @staticmethod
+    def _gf_quat_from_xyzw(quat_xyzw: torch.Tensor):
+        from pxr import Gf
+
+        quat = quat_xyzw.detach().cpu().tolist()
+        return Gf.Quatf(float(quat[3]), Gf.Vec3f(float(quat[0]), float(quat[1]), float(quat[2])))
+
+    @staticmethod
+    def _find_rigid_body_prim(stage, root_path: str, body_name: str | None = None):
+        from pxr import Usd, UsdPhysics
+
+        root_prim = stage.GetPrimAtPath(root_path)
+        if not root_prim.IsValid():
+            raise ValueError(f"Could not find prim at path '{root_path}'")
+
+        if body_name is not None:
+            for prim in Usd.PrimRange(root_prim):
+                if prim.GetName() == body_name and prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                    return prim
+
+        if root_prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return root_prim
+
+        for prim in Usd.PrimRange(root_prim):
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                return prim
+
+        label = f" named '{body_name}'" if body_name else ""
+        raise ValueError(f"Could not find a rigid body prim{label} under '{root_path}'")
+
+
 class randomize_gears_and_base_pose(ManagerTermBase):
     """Randomize both the gear base pose and individual gear poses.
 
