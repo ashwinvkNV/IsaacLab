@@ -183,14 +183,15 @@ def log_latched_gear_insertion_success_metrics(
     env_ids: torch.Tensor | None,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
     pose_error_thresholds: tuple[float, ...] = (0.001, 0.003, 0.005),
+    success_termination_terms: tuple[str, ...] = ("inserted_success",),
 ) -> None:
     """Log episode-level insertion success latched over the full episode.
 
     A success is latched when the active gear pose error falls below a threshold
     at any point during the episode. The episode only counts as successful if it
-    later ends by timeout without any non-timeout termination such as gear drop
-    or orientation failure. This term logs metrics only and does not affect
-    rewards or termination behavior.
+    later ends by timeout without any non-timeout failure termination, or by an
+    explicit success termination such as ``inserted_success``. This term logs
+    metrics only and does not affect rewards or termination behavior.
     """
     env_ids = _resolve_env_ids(env, env_ids)
     thresholds = torch.tensor(pose_error_thresholds, device=env.device, dtype=torch.float32)
@@ -206,13 +207,18 @@ def log_latched_gear_insertion_success_metrics(
     done_count = done_env_ids.numel()
     if done_count > 0:
         timeouts = env.reset_time_outs[done_env_ids].bool()
-        failures = env.reset_terminated[done_env_ids].bool()
+        success_terminations = _get_any_termination_term_values(env, success_termination_terms, done_env_ids)
+        failures = _get_non_success_termination_term_values(env, success_termination_terms, done_env_ids)
         clean_timeouts = timeouts & ~failures
-        successful = clean_timeouts.unsqueeze(-1) & state["latched_success"][done_env_ids]
+        clean_success_terminations = success_terminations & ~failures
+        successful = (clean_timeouts | clean_success_terminations).unsqueeze(-1) & state["latched_success"][
+            done_env_ids
+        ]
 
         state["episode_count"] += float(done_count)
         state["timeout_count"] += timeouts.sum().to(torch.float64)
         state["clean_timeout_count"] += clean_timeouts.sum().to(torch.float64)
+        state["success_termination_count"] += clean_success_terminations.sum().to(torch.float64)
         state["failure_count"] += failures.sum().to(torch.float64)
         state["success_count"] += successful.sum(dim=0).to(torch.float64)
         state["latched_success"][done_env_ids] = False
@@ -228,6 +234,7 @@ def log_latched_gear_insertion_success_metrics(
     log["gear_success/episode_count"] = state["episode_count"].item()
     log["gear_success/episode_timeout_count"] = state["timeout_count"].item()
     log["gear_success/episode_clean_timeout_count"] = state["clean_timeout_count"].item()
+    log["gear_success/episode_success_termination_count"] = state["success_termination_count"].item()
     log["gear_success/episode_failure_count"] = state["failure_count"].item()
     log["gear_success/episode_timeout_fraction"] = (state["timeout_count"] / episode_count).item()
     log["gear_success/episode_failure_fraction"] = (state["failure_count"] / episode_count).item()
@@ -245,11 +252,48 @@ def log_latched_gear_insertion_success_metrics(
         )
 
 
+def _get_any_termination_term_values(
+    env: ManagerBasedEnv, term_names: tuple[str, ...], env_ids: torch.Tensor
+) -> torch.Tensor:
+    """Return the union of latest values for termination terms."""
+    values = torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+    for term_name in term_names:
+        values |= _get_termination_term_values(env, term_name, env_ids)
+    return values
+
+
+def _get_termination_term_values(env: ManagerBasedEnv, term_name: str, env_ids: torch.Tensor) -> torch.Tensor:
+    """Return latest values for a termination term, or false if unavailable."""
+    termination_manager = getattr(env, "termination_manager", None)
+    if termination_manager is None:
+        return torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+    if term_name not in termination_manager.active_terms:
+        return torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+    return termination_manager.get_term(term_name)[env_ids].bool()
+
+
+def _get_non_success_termination_term_values(
+    env: ManagerBasedEnv, success_term_names: tuple[str, ...], env_ids: torch.Tensor
+) -> torch.Tensor:
+    """Return the union of latest non-timeout, non-success termination values."""
+    termination_manager = getattr(env, "termination_manager", None)
+    if termination_manager is None:
+        return torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+
+    values = torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+    for term_name in termination_manager.active_terms:
+        if term_name == "time_out" or term_name in success_term_names:
+            continue
+        values |= _get_termination_term_values(env, term_name, env_ids)
+    return values
+
+
 def _get_latched_gear_success_state(env: ManagerBasedEnv, thresholds: torch.Tensor) -> dict[str, torch.Tensor]:
     """Return persistent state for latched episode success metrics."""
     state = getattr(env, "_latched_gear_insertion_success_metrics", None)
     needs_init = (
         state is None
+        or "success_termination_count" not in state
         or state["pose_error_thresholds"].shape != thresholds.shape
         or not torch.allclose(state["pose_error_thresholds"], thresholds)
         or state["latched_success"].shape[0] != env.num_envs
@@ -263,6 +307,7 @@ def _get_latched_gear_success_state(env: ManagerBasedEnv, thresholds: torch.Tens
         "episode_count": torch.zeros((), device=env.device, dtype=torch.float64),
         "timeout_count": torch.zeros((), device=env.device, dtype=torch.float64),
         "clean_timeout_count": torch.zeros((), device=env.device, dtype=torch.float64),
+        "success_termination_count": torch.zeros((), device=env.device, dtype=torch.float64),
         "failure_count": torch.zeros((), device=env.device, dtype=torch.float64),
         "success_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
     }

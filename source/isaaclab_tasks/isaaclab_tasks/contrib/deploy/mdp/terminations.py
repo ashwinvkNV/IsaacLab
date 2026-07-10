@@ -263,6 +263,77 @@ class reset_when_gear_grasp_slips_before_insertion(reset_when_gear_dropped):
         return torch.maximum(xy_error, z_error)
 
 
+class reset_when_gear_inserted_and_stable(ManagerTermBase):
+    """Reset when the active gear remains inserted for consecutive control steps."""
+
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+
+        self.base_asset_cfg: SceneEntityCfg = cfg.params.get("asset_cfg", SceneEntityCfg("factory_gear_base"))
+        self.base_asset = env.scene[self.base_asset_cfg.name]
+        self.gear_assets = {
+            "gear_small": env.scene["factory_gear_small"],
+            "gear_medium": env.scene["factory_gear_medium"],
+            "gear_large": env.scene["factory_gear_large"],
+        }
+        self.env_indices = torch.arange(env.num_envs, device=env.device)
+        self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+        self.stable_step_count = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
+        self.success_flags = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    def __call__(
+        self,
+        env: ManagerBasedEnv,
+        pose_error_threshold: float = 0.003,
+        stable_steps: int = 15,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
+    ) -> torch.Tensor:
+        """Check whether the gear has been stably inserted long enough to end the episode."""
+        if not hasattr(env, "_gear_type_manager"):
+            raise RuntimeError(
+                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
+                "in your environment's event configuration before this termination term is used."
+            )
+
+        self.gear_type_indices = env._gear_type_manager.get_all_gear_type_indices()
+        pose_error = self._compute_insertion_pose_error()
+        inserted = pose_error <= pose_error_threshold
+
+        self.stable_step_count[:] = torch.where(
+            inserted,
+            self.stable_step_count + 1,
+            torch.zeros_like(self.stable_step_count),
+        )
+        self.success_flags[:] = self.stable_step_count >= stable_steps
+
+        return self.success_flags
+
+    def reset(self, env_ids: torch.Tensor | None = None) -> None:
+        """Reset consecutive insertion counters."""
+        if env_ids is None:
+            self.stable_step_count.zero_()
+            return
+        self.stable_step_count[env_ids] = 0
+
+    def _compute_insertion_pose_error(self) -> torch.Tensor:
+        """Compute active gear pose error against the gear base."""
+        all_gear_pos = torch.stack(
+            [
+                self.gear_assets["gear_small"].data.root_pos_w.torch,
+                self.gear_assets["gear_medium"].data.root_pos_w.torch,
+                self.gear_assets["gear_large"].data.root_pos_w.torch,
+            ],
+            dim=1,
+        )
+        gear_pos = all_gear_pos[self.env_indices, self.gear_type_indices]
+        base_pos = self.base_asset.data.root_pos_w.torch
+
+        pos_error = gear_pos - base_pos
+        xy_error = torch.linalg.norm(pos_error[:, :2], dim=-1)
+        z_error = torch.abs(pos_error[:, 2])
+        return torch.maximum(xy_error, z_error)
+
+
 class reset_when_gear_orientation_exceeds_threshold(ManagerTermBase):
     """Check if the gear's orientation relative to the gripper exceeds thresholds.
 

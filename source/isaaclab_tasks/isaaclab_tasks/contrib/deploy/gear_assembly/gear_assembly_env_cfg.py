@@ -312,6 +312,15 @@ class TerminationsCfg:
         },
     )
 
+    inserted_success = DoneTerm(
+        func=gear_assembly_terminations.reset_when_gear_inserted_and_stable,
+        params={
+            "pose_error_threshold": 0.003,  # 3mm active gear/base pose error
+            "stable_steps": 15,  # 0.5s at 30Hz control
+            "asset_cfg": SceneEntityCfg("factory_gear_base"),
+        },
+    )
+
     gear_orientation_exceeded = DoneTerm(
         func=gear_assembly_terminations.reset_when_gear_orientation_exceeds_threshold,
         params={

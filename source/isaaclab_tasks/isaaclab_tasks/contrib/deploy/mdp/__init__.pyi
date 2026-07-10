@@ -22,6 +22,7 @@ __all__ = [
     "log_latched_gear_insertion_success_metrics",
     "log_gear_insertion_pose_error_metrics",
     "reset_when_gear_dropped",
+    "reset_when_gear_inserted_and_stable",
     "reset_when_gear_grasp_slips_before_insertion",
     "reset_when_gear_orientation_exceeds_threshold",
     "DelayedRelativeJointPositionAction",
@@ -55,6 +56,7 @@ from .rewards import (
 )
 from .terminations import (
     reset_when_gear_dropped,
+    reset_when_gear_inserted_and_stable,
     reset_when_gear_grasp_slips_before_insertion,
     reset_when_gear_orientation_exceeds_threshold,
 )
