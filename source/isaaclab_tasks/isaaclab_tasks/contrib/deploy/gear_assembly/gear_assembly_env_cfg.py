@@ -302,6 +302,16 @@ class TerminationsCfg:
         },
     )
 
+    gear_grasp_slipped_before_insertion = DoneTerm(
+        func=gear_assembly_terminations.reset_when_gear_grasp_slips_before_insertion,
+        params={
+            "distance_threshold": 0.03,  # 3cm from gripper before insertion
+            "inserted_pose_error_threshold": 0.003,  # 3mm pose error counts as inserted
+            "asset_cfg": SceneEntityCfg("factory_gear_base"),
+            "robot_asset_cfg": SceneEntityCfg("robot"),
+        },
+    )
+
     gear_orientation_exceeded = DoneTerm(
         func=gear_assembly_terminations.reset_when_gear_orientation_exceeds_threshold,
         params={

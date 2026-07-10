@@ -442,6 +442,11 @@ class Rizon4sGearAssemblyEnvCfg(GearAssemblyEnvCfg):
         self.terminations.gear_dropped.params["gear_offsets_grasp"] = self.gear_offsets_grasp
         self.terminations.gear_dropped.params["end_effector_body_name"] = self.end_effector_body_name
         self.terminations.gear_dropped.params["grasp_rot_offset"] = self.grasp_rot_offset
+        self.terminations.gear_grasp_slipped_before_insertion.params["gear_offsets_grasp"] = self.gear_offsets_grasp
+        self.terminations.gear_grasp_slipped_before_insertion.params["end_effector_body_name"] = (
+            self.end_effector_body_name
+        )
+        self.terminations.gear_grasp_slipped_before_insertion.params["grasp_rot_offset"] = self.grasp_rot_offset
 
         self.terminations.gear_orientation_exceeded.params["end_effector_body_name"] = self.end_effector_body_name
         self.terminations.gear_orientation_exceeded.params["grasp_rot_offset"] = self.grasp_rot_offset

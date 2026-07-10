@@ -146,8 +146,19 @@ class reset_when_gear_dropped(ManagerTermBase):
         # Reset flags
         self.reset_flags.fill_(False)
 
-        if self.eef_idx is None:
+        distances = self._compute_gear_grasp_distances(env)
+        if distances is None:
             return self.reset_flags
+
+        # Check distance threshold
+        self.reset_flags[:] = distances > distance_threshold
+
+        return self.reset_flags
+
+    def _compute_gear_grasp_distances(self, env: ManagerBasedEnv) -> torch.Tensor | None:
+        """Compute distance from the active gear grasp point to the end effector."""
+        if self.eef_idx is None:
+            return None
 
         # Check if gear type manager exists
         if not hasattr(env, "_gear_type_manager"):
@@ -186,12 +197,70 @@ class reset_when_gear_dropped(ManagerTermBase):
         gear_grasp_pos_world = gear_pos_world + math_utils.quat_apply(gear_quat_world, self.gear_grasp_offsets_buffer)
 
         # Compute distances
-        distances = torch.linalg.norm(gear_grasp_pos_world - eef_pos_world, dim=-1)
+        return torch.linalg.norm(gear_grasp_pos_world - eef_pos_world, dim=-1)
 
-        # Check distance threshold
-        self.reset_flags[:] = distances > distance_threshold
+
+class reset_when_gear_grasp_slips_before_insertion(reset_when_gear_dropped):
+    """Reset when the active gear leaves the gripper before it reaches insertion pose."""
+
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+
+        self.base_asset_cfg: SceneEntityCfg = cfg.params.get("asset_cfg", SceneEntityCfg("factory_gear_base"))
+        self.base_asset = env.scene[self.base_asset_cfg.name]
+
+    def __call__(
+        self,
+        env: ManagerBasedEnv,
+        distance_threshold: float = 0.03,
+        inserted_pose_error_threshold: float = 0.003,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
+        robot_asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        gear_offsets_grasp: dict | None = None,
+        end_effector_body_name: str | None = None,
+        grasp_rot_offset: list | None = None,
+    ) -> torch.Tensor:
+        """Check whether the gear slipped away from the gripper before insertion.
+
+        Args:
+            env: Environment instance.
+            distance_threshold: Maximum allowed distance between gear grasp point and gripper before insertion.
+            inserted_pose_error_threshold: Pose-error threshold below which the gear is considered inserted.
+            asset_cfg: Configuration for the gear base asset.
+            robot_asset_cfg: Configuration for the robot asset (unused, kept for compatibility).
+
+        Returns:
+            Boolean tensor indicating which environments should be reset.
+        """
+        self.reset_flags.fill_(False)
+
+        distances = self._compute_gear_grasp_distances(env)
+        if distances is None:
+            return self.reset_flags
+
+        pose_error = self._compute_insertion_pose_error()
+        before_insertion = pose_error > inserted_pose_error_threshold
+        self.reset_flags[:] = (distances > distance_threshold) & before_insertion
 
         return self.reset_flags
+
+    def _compute_insertion_pose_error(self) -> torch.Tensor:
+        """Compute active gear pose error against the gear base."""
+        all_gear_pos = torch.stack(
+            [
+                self.gear_assets["gear_small"].data.root_pos_w.torch,
+                self.gear_assets["gear_medium"].data.root_pos_w.torch,
+                self.gear_assets["gear_large"].data.root_pos_w.torch,
+            ],
+            dim=1,
+        )
+        gear_pos = all_gear_pos[self.env_indices, self.gear_type_indices]
+        base_pos = self.base_asset.data.root_pos_w.torch
+
+        pos_error = gear_pos - base_pos
+        xy_error = torch.linalg.norm(pos_error[:, :2], dim=-1)
+        z_error = torch.abs(pos_error[:, 2])
+        return torch.maximum(xy_error, z_error)
 
 
 class reset_when_gear_orientation_exceeds_threshold(ManagerTermBase):
