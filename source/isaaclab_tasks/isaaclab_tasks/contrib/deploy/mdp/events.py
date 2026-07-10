@@ -208,12 +208,29 @@ def log_latched_gear_insertion_success_metrics(
         timeouts = env.reset_time_outs[done_env_ids].bool()
         failures = env.reset_terminated[done_env_ids].bool()
         clean_timeouts = timeouts & ~failures
+        gear_drop_failures = _get_termination_term_values(env, "gear_dropped", done_env_ids) & failures
+        gear_orientation_failures = (
+            _get_termination_term_values(env, "gear_orientation_exceeded", done_env_ids) & failures
+        )
+        inserted = state["latched_success"][done_env_ids]
         successful = clean_timeouts.unsqueeze(-1) & state["latched_success"][done_env_ids]
 
         state["episode_count"] += float(done_count)
         state["timeout_count"] += timeouts.sum().to(torch.float64)
         state["clean_timeout_count"] += clean_timeouts.sum().to(torch.float64)
         state["failure_count"] += failures.sum().to(torch.float64)
+        state["inserted_count"] += inserted.sum(dim=0).to(torch.float64)
+        state["inserted_timeout_count"] += (inserted & timeouts.unsqueeze(-1)).sum(dim=0).to(torch.float64)
+        state["inserted_clean_timeout_count"] += (
+            inserted & clean_timeouts.unsqueeze(-1)
+        ).sum(dim=0).to(torch.float64)
+        state["inserted_failure_count"] += (inserted & failures.unsqueeze(-1)).sum(dim=0).to(torch.float64)
+        state["inserted_drop_failure_count"] += (
+            inserted & gear_drop_failures.unsqueeze(-1)
+        ).sum(dim=0).to(torch.float64)
+        state["inserted_orientation_failure_count"] += (
+            inserted & gear_orientation_failures.unsqueeze(-1)
+        ).sum(dim=0).to(torch.float64)
         state["success_count"] += successful.sum(dim=0).to(torch.float64)
         state["latched_success"][done_env_ids] = False
 
@@ -235,21 +252,81 @@ def log_latched_gear_insertion_success_metrics(
     for index, threshold in enumerate(pose_error_thresholds):
         threshold_mm = int(round(threshold * 1000.0))
         success_count = state["success_count"][index]
+        inserted_count = state["inserted_count"][index]
+        inserted_count_clamped = torch.clamp(inserted_count, min=1.0)
+        inserted_timeout_count = state["inserted_timeout_count"][index]
+        inserted_clean_timeout_count = state["inserted_clean_timeout_count"][index]
+        inserted_failure_count = state["inserted_failure_count"][index]
+        inserted_drop_failure_count = state["inserted_drop_failure_count"][index]
+        inserted_orientation_failure_count = state["inserted_orientation_failure_count"][index]
         log[f"gear_success/episode_success_count_{threshold_mm}mm"] = success_count.item()
         log[f"gear_success/episode_success_rate_{threshold_mm}mm"] = (success_count / episode_count).item()
         log[f"gear_success/clean_timeout_success_rate_{threshold_mm}mm"] = (
             success_count / clean_timeout_count
+        ).item()
+        log[f"gear_success/episode_inserted_count_{threshold_mm}mm"] = inserted_count.item()
+        log[f"gear_success/episode_inserted_rate_{threshold_mm}mm"] = (inserted_count / episode_count).item()
+        log[f"gear_success/episode_inserted_then_timeout_rate_{threshold_mm}mm"] = (
+            inserted_timeout_count / episode_count
+        ).item()
+        log[f"gear_success/episode_inserted_then_clean_timeout_rate_{threshold_mm}mm"] = (
+            inserted_clean_timeout_count / episode_count
+        ).item()
+        log[f"gear_success/episode_inserted_then_failure_rate_{threshold_mm}mm"] = (
+            inserted_failure_count / episode_count
+        ).item()
+        log[f"gear_success/episode_inserted_then_drop_failure_rate_{threshold_mm}mm"] = (
+            inserted_drop_failure_count / episode_count
+        ).item()
+        log[f"gear_success/episode_inserted_then_orientation_failure_rate_{threshold_mm}mm"] = (
+            inserted_orientation_failure_count / episode_count
+        ).item()
+        log[f"gear_success/inserted_then_timeout_rate_{threshold_mm}mm"] = (
+            inserted_timeout_count / inserted_count_clamped
+        ).item()
+        log[f"gear_success/inserted_then_clean_timeout_rate_{threshold_mm}mm"] = (
+            inserted_clean_timeout_count / inserted_count_clamped
+        ).item()
+        log[f"gear_success/inserted_then_failure_rate_{threshold_mm}mm"] = (
+            inserted_failure_count / inserted_count_clamped
+        ).item()
+        log[f"gear_success/inserted_then_drop_failure_rate_{threshold_mm}mm"] = (
+            inserted_drop_failure_count / inserted_count_clamped
+        ).item()
+        log[f"gear_success/inserted_then_orientation_failure_rate_{threshold_mm}mm"] = (
+            inserted_orientation_failure_count / inserted_count_clamped
         ).item()
         log[f"gear_success/latched_pose_error_rate_{threshold_mm}mm"] = (
             state["latched_success"][:, index].float().mean().item()
         )
 
 
+def _get_termination_term_values(env: ManagerBasedEnv, term_name: str, env_ids: torch.Tensor) -> torch.Tensor:
+    """Return latest values for a termination term, or false if unavailable."""
+    termination_manager = getattr(env, "termination_manager", None)
+    if termination_manager is None:
+        return torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+    if term_name not in termination_manager.active_terms:
+        return torch.zeros(env_ids.shape, device=env.device, dtype=torch.bool)
+    return termination_manager.get_term(term_name)[env_ids].bool()
+
+
 def _get_latched_gear_success_state(env: ManagerBasedEnv, thresholds: torch.Tensor) -> dict[str, torch.Tensor]:
     """Return persistent state for latched episode success metrics."""
     state = getattr(env, "_latched_gear_insertion_success_metrics", None)
+    required_keys = (
+        "pose_error_thresholds",
+        "latched_success",
+        "inserted_count",
+        "inserted_timeout_count",
+        "inserted_clean_timeout_count",
+        "inserted_failure_count",
+        "inserted_drop_failure_count",
+        "inserted_orientation_failure_count",
+    )
     needs_init = (
         state is None
+        or any(key not in state for key in required_keys)
         or state["pose_error_thresholds"].shape != thresholds.shape
         or not torch.allclose(state["pose_error_thresholds"], thresholds)
         or state["latched_success"].shape[0] != env.num_envs
@@ -264,6 +341,12 @@ def _get_latched_gear_success_state(env: ManagerBasedEnv, thresholds: torch.Tens
         "timeout_count": torch.zeros((), device=env.device, dtype=torch.float64),
         "clean_timeout_count": torch.zeros((), device=env.device, dtype=torch.float64),
         "failure_count": torch.zeros((), device=env.device, dtype=torch.float64),
+        "inserted_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
+        "inserted_timeout_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
+        "inserted_clean_timeout_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
+        "inserted_failure_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
+        "inserted_drop_failure_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
+        "inserted_orientation_failure_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
         "success_count": torch.zeros(len(thresholds), device=env.device, dtype=torch.float64),
     }
     env._latched_gear_insertion_success_metrics = state
