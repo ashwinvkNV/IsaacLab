@@ -287,6 +287,16 @@ class RewardsCfg:
 
     action_rate = RewTerm(func=mdp.action_rate_l2, weight=-5.0e-06)
 
+    post_insertion_action_l2 = RewTerm(
+        func=mdp.post_insertion_action_l2,
+        weight=-1.0e-03,
+        params={
+            "action_name": "arm_action",
+            "pose_error_threshold": 0.003,
+            "asset_cfg": SceneEntityCfg("factory_gear_base"),
+        },
+    )
+
 
 @configclass
 class TerminationsCfg:

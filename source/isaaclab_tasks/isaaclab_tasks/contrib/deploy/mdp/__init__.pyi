@@ -19,6 +19,7 @@ __all__ = [
     "keypoint_entity_error_exp",
     "keypoint_ee_grasp_error",
     "keypoint_ee_grasp_error_exp",
+    "post_insertion_action_l2",
     "log_latched_gear_insertion_success_metrics",
     "log_gear_insertion_pose_error_metrics",
     "reset_when_gear_dropped",
@@ -53,6 +54,7 @@ from .rewards import (
     keypoint_entity_error_exp,
     keypoint_ee_grasp_error,
     keypoint_ee_grasp_error_exp,
+    post_insertion_action_l2,
 )
 from .terminations import (
     reset_when_gear_dropped,

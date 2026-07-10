@@ -568,6 +568,72 @@ class keypoint_ee_grasp_error_exp(keypoint_ee_grasp_error):
         return scaled_reward
 
 
+class post_insertion_action_l2(ManagerTermBase):
+    """Penalize action magnitude only after the active gear reaches insertion pose."""
+
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+
+        self.asset_cfg: SceneEntityCfg = cfg.params.get("asset_cfg", SceneEntityCfg("factory_gear_base"))
+        self.base_asset = env.scene[self.asset_cfg.name]
+        self.gear_assets = {
+            "gear_small": env.scene["factory_gear_small"],
+            "gear_medium": env.scene["factory_gear_medium"],
+            "gear_large": env.scene["factory_gear_large"],
+        }
+        self.env_indices = torch.arange(env.num_envs, device=env.device)
+        self.gear_type_indices = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+
+    def __call__(
+        self,
+        env: ManagerBasedRLEnv,
+        action_name: str = "arm_action",
+        pose_error_threshold: float = 0.003,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("factory_gear_base"),
+    ) -> torch.Tensor:
+        """Return post-insertion action L2 for the selected action term."""
+        if not hasattr(env, "_gear_type_manager"):
+            raise RuntimeError(
+                "Gear type manager not initialized. Ensure randomize_gear_type event is configured "
+                "in your environment's event configuration before this reward term is used."
+            )
+
+        pose_error = self._compute_insertion_pose_error(env)
+        inserted = pose_error <= pose_error_threshold
+        actions = env.action_manager.get_term(action_name).raw_actions
+        action_l2 = torch.sum(torch.square(actions), dim=-1)
+        reward = inserted.float() * action_l2
+
+        if not hasattr(env, "extras"):
+            env.extras = {}
+        if "log" not in env.extras:
+            env.extras["log"] = {}
+        env.extras["log"]["post_insertion_hold/active_rate"] = inserted.float().mean().item()
+        env.extras["log"]["post_insertion_hold/action_l2_mean"] = action_l2.mean().item()
+        env.extras["log"]["post_insertion_hold/active_action_l2_mean"] = reward.mean().item()
+
+        return reward
+
+    def _compute_insertion_pose_error(self, env: ManagerBasedRLEnv) -> torch.Tensor:
+        """Compute active gear pose error against the gear base."""
+        self.gear_type_indices = env._gear_type_manager.get_all_gear_type_indices()
+        all_gear_pos = torch.stack(
+            [
+                self.gear_assets["gear_small"].data.root_pos_w.torch,
+                self.gear_assets["gear_medium"].data.root_pos_w.torch,
+                self.gear_assets["gear_large"].data.root_pos_w.torch,
+            ],
+            dim=1,
+        )
+        gear_pos = all_gear_pos[self.env_indices, self.gear_type_indices]
+        base_pos = self.base_asset.data.root_pos_w.torch
+
+        pos_error = gear_pos - base_pos
+        xy_error = torch.linalg.norm(pos_error[:, :2], dim=-1)
+        z_error = torch.abs(pos_error[:, 2])
+        return torch.maximum(xy_error, z_error)
+
+
 ##
 # Helper functions and classes
 ##
