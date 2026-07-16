@@ -2,10 +2,7 @@ _generated_by: real_vs_sim_sysid_rmse/full_dataset_sysid/scripts/flexiv_full_dat
 _source_best_params_yaml: /home/horde/IsaacLab/output/sysid/flexiv/pd_only_gravityoff_high_cmdlimits_seed_default_steps_pm10_physx_n64_g20/best_params.yaml
 _source_gains_yaml: /home/horde/IsaacLab/input/manual_pd/flexiv_pd_only_gravityoff_high_cmdlimits_tuned_physx.yaml
 _base_actuator_yaml: flexiv/rizon4s_grav_usd_default_implicit.yaml
-_source_dataset:
-  - /home/ashwin/git_cloned/IsaacLab_osmo/input/sysid_data/flexiv_workspace_xlarge_base01_zero/output
-  - /home/ashwin/git_cloned/IsaacLab_osmo/input/sysid_data/flexiv_workspace_xlarge_base02_joint4_90deg/output
-
+_source_dataset: /home/ashwin/git_cloned/IsaacLab_osmo/input/sysid_data/real_robot_newton_extra/k0p4_z0p7/data
 effort_limit_sim:
   joint1: 123.0
   joint2: 123.0
@@ -14,7 +11,6 @@ effort_limit_sim:
   joint5: 39.0
   joint6: 39.0
   joint7: 39.0
-
 velocity_limit_sim:
   joint1: 2.094
   joint2: 2.094
@@ -23,43 +19,70 @@ velocity_limit_sim:
   joint5: 4.887
   joint6: 4.887
   joint7: 4.887
-
 stiffness:
-  joint1: 2444.644779860334
-  joint2: 2454.6088134535826
-  joint3: 4273.368452557374
-  joint4: 2423.6797438613694
-  joint5: 6664.534638550969
-  joint6: 2476.4182575483555
-  joint7: 7750.655168285934
-
+  joint1: 603.6151943702913
+  joint2: 1327.8120798809894
+  joint3: 1261.3152644011877
+  joint4: 1022.4167930914674
+  joint5: 2806.1765788775538
+  joint6: 1465.1404406681652
+  joint7: 2595.0264083641196
 damping:
-  joint1: 84.53152821762647
-  joint2: 270.1514569287321
-  joint3: 192.11542410547165
-  joint4: 185.80477160067872
-  joint5: 348.9429103302826
-  joint6: 137.1076685992307
-  joint7: 155.4299494964395
-
+  joint1: 44.1684835749946
+  joint2: 167.82319226508454
+  joint3: 81.32498755040426
+  joint4: 104.3790521472809
+  joint5: 124.54825885090308
+  joint6: 78.86495153084978
+  joint7: 89.81394629661034
 armature:
-  joint1: 0.016031804623087037
-  joint2: 0.0
-  joint3: 0.09079310995247876
-  joint4: 0.0
-  joint5: 0.03506234030793366
-  joint6: 0.028407284483869172
-  joint7: 0.0
-
+  joint1: 0.018940014751913654
+  joint2: 0.012966135831506242
+  joint3: 0.07263868305930392
+  joint4: 0.020706867652577843
+  joint5: 0.023493411333875877
+  joint6: 0.0201854596539693
+  joint7: 0.010585361278044665
 friction:
-  joint1: 0.4469057501336581
-  joint2: 0.0028027430277378224
-  joint3: 0.0
-  joint4: 0.023950665402821605
-  joint5: 0.19162425676108663
-  joint6: 0.3486314724253511
-  joint7: 0.07779038751031743
-
+  joint1: 0.4506146444162112
+  joint2: 0.0175694048877425
+  joint3: 0.06444584340566464
+  joint4: 0.27551527887462735
+  joint5: 0.5288273969979841
+  joint6: 0.15834088158709383
+  joint7: 0.18334593770564261
 motor_lag_ms: 20.0
 command_velocity_limit: 2.0
 command_acceleration_limit: 3.0
+_base_seed_yaml: /home/ashwin/git_cloned/IsaacLab_osmo/IsaacLab_flexiv_sysid_physx_clean/input/actuator_models/flexiv/manual/flexiv_pd_only_gravityoff_high_cmdlimits_tuned_physx.yaml
+_stiffness_scale: 0.4
+_damping_scale: 0.6324555320336759
+_source_logs:
+- cmd_response_chirp_a10deg_k0p4_z0p7
+- cmd_response_chirp_a6deg_k0p4_z0p7
+- cmd_response_multisine_a12deg_seed1_k0p4_z0p7
+- cmd_response_multisine_a8deg_seed1_k0p4_z0p7
+- cmd_response_random_hold_a12deg_seed1_k0p4_z0p7
+- cmd_response_random_hold_a8deg_seed1_k0p4_z0p7
+- cmd_response_steps_pm15deg_k0p4_z0p7
+- cmd_response_steps_pm5deg_k0p4_z0p7
+_optimizer:
+  kind: cross_entropy_random_search
+  seed: 17
+  num_candidates: 12
+  generations: 8
+  top_k: 4
+  stiffness_bounds:
+  - 100.0
+  - 15000.0
+  damping_bounds:
+  - 5.0
+  - 500.0
+  tune_armature_friction: true
+  armature_bounds:
+  - 0.0
+  - 1.0
+  friction_bounds:
+  - 0.0
+  - 5.0
+  objective: mean per-joint RMSE over all selected command-response logs
