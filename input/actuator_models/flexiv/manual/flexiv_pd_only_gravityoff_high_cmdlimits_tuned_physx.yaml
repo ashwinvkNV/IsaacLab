@@ -1,0 +1,88 @@
+_generated_by: real_vs_sim_sysid_rmse/full_dataset_sysid/scripts/flexiv_full_dataset_sysid_tune.py
+_source_best_params_yaml: /home/horde/IsaacLab/output/sysid/flexiv/pd_only_gravityoff_high_cmdlimits_seed_default_steps_pm10_physx_n64_g20/best_params.yaml
+_source_gains_yaml: /home/horde/IsaacLab/input/manual_pd/flexiv_pd_only_gravityoff_high_cmdlimits_tuned_physx.yaml
+_base_actuator_yaml: flexiv/rizon4s_grav_usd_default_implicit.yaml
+_source_dataset: /home/ashwin/git_cloned/IsaacLab_osmo/input/sysid_data/real_robot_newton_extra/k0p1_z0p7/data
+effort_limit_sim:
+  joint1: 123.0
+  joint2: 123.0
+  joint3: 64.0
+  joint4: 64.0
+  joint5: 39.0
+  joint6: 39.0
+  joint7: 39.0
+velocity_limit_sim:
+  joint1: 2.094
+  joint2: 2.094
+  joint3: 2.443
+  joint4: 2.443
+  joint5: 4.887
+  joint6: 4.887
+  joint7: 4.887
+stiffness:
+  joint1: 219.98399271663095
+  joint2: 438.3757632488879
+  joint3: 336.9083182265056
+  joint4: 322.3022523104754
+  joint5: 741.3088031327978
+  joint6: 334.3343547738927
+  joint7: 607.7514907598975
+damping:
+  joint1: 22.49941522922993
+  joint2: 90.70641065248924
+  joint3: 32.68004840101756
+  joint4: 57.26210446266428
+  joint5: 58.73134925117293
+  joint6: 32.882616426216984
+  joint7: 35.87023770962538
+armature:
+  joint1: 0.017913976742675208
+  joint2: 0.04750526560653347
+  joint3: 0.07087110656342373
+  joint4: 0.010207064711429216
+  joint5: 0.03248348076043622
+  joint6: 0.017636038018636856
+  joint7: 0.05242136589885896
+friction:
+  joint1: 0.40101743662945694
+  joint2: 0.06940727199651323
+  joint3: 0.14037760169270955
+  joint4: 0.10502548597680338
+  joint5: 0.871647620462372
+  joint6: 0.27115600495513936
+  joint7: 0.09282957369603993
+motor_lag_ms: 20.0
+command_velocity_limit: 2.0
+command_acceleration_limit: 3.0
+_base_seed_yaml: /home/ashwin/git_cloned/IsaacLab_osmo/IsaacLab_flexiv_sysid_physx_clean/input/actuator_models/flexiv/manual/flexiv_pd_only_gravityoff_high_cmdlimits_tuned_physx.yaml
+_stiffness_scale: 0.1
+_damping_scale: 0.31622776601683794
+_source_logs:
+- cmd_response_chirp_a10deg_k0p1_z0p7
+- cmd_response_chirp_a6deg_k0p1_z0p7
+- cmd_response_multisine_a12deg_seed1_k0p1_z0p7
+- cmd_response_multisine_a8deg_seed1_k0p1_z0p7
+- cmd_response_random_hold_a12deg_seed1_k0p1_z0p7
+- cmd_response_random_hold_a8deg_seed1_k0p1_z0p7
+- cmd_response_steps_pm15deg_k0p1_z0p7
+- cmd_response_steps_pm5deg_k0p1_z0p7
+_optimizer:
+  kind: cross_entropy_random_search
+  seed: 17
+  num_candidates: 12
+  generations: 8
+  top_k: 4
+  stiffness_bounds:
+  - 100.0
+  - 15000.0
+  damping_bounds:
+  - 5.0
+  - 500.0
+  tune_armature_friction: true
+  armature_bounds:
+  - 0.0
+  - 1.0
+  friction_bounds:
+  - 0.0
+  - 5.0
+  objective: mean per-joint RMSE over all selected command-response logs
